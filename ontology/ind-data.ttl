@@ -1,0 +1,107 @@
+@prefix ind:  <https://example.org/ind#> .
+@prefix eq:   <https://example.org/ind/eq/> .
+@prefix asm:  <https://example.org/ind/asm/> .
+@prefix p:    <https://example.org/ind/p/> .
+@prefix mat:  <https://example.org/ind/mat/> .
+@prefix fn:   <https://example.org/ind/fn/> .
+@prefix req:  <https://example.org/ind/req/> .
+@prefix cad:  <https://example.org/ind/cad/> .
+@prefix site: <https://example.org/ind/site/> .
+@prefix owl:  <http://www.w3.org/2002/07/owl#> .
+@prefix rdf:  <http://www.w3.org/1999/02/22-rdf-syntax-ns#> .
+@prefix rdfs: <http://www.w3.org/2000/01/rdf-schema#> .
+@prefix xsd:  <http://www.w3.org/2001/XMLSchema#> .
+
+##############################################################################
+# ABox：真实数据只写"直接观察到的事实"，其余交给推理。
+# 故意留了 3 处缺陷给 SHACL 抓（见 ind-shapes.ttl 的注释）。
+##############################################################################
+
+################################  材料  ######################################
+mat:Steel    a ind:Material ; rdfs:label "结构钢 Q355"@zh ; ind:density 7850 .
+mat:Aluminum a ind:Material ; rdfs:label "6061-T6 铝"@zh ; ind:density 2700 .
+mat:Steel owl:differentFrom mat:Aluminum .
+
+################################  功能  ######################################
+fn:Drive      a ind:Actuation         ; rdfs:label "液压驱动"@zh .
+fn:Fasten     a ind:Fastening         ; rdfs:label "螺纹紧固"@zh .
+fn:BearLoad   a ind:StructuralSupport ; rdfs:label "承载"@zh .
+fn:OverTravel a ind:SafetyMonitoring  ; rdfs:label "超程监测"@zh .
+
+################################  要求  ######################################
+req:CE-Machinery a ind:SafetyRequirement ;
+    rdfs:label "机械指令 2006/42/EC"@zh ;
+    rdfs:comment "欧盟机械安全指令"@zh .
+req:ISO-9001 a ind:CertificationRequirement ;
+    rdfs:label "ISO 9001:2015"@zh .
+
+################################  模型  ######################################
+cad:Press01-Assembly a ind:CADModel ; rdfs:label "冲压机总装"@zh ; ind:revision "C" .
+cad:Frame-Drawing     a ind:CADModel ; rdfs:label "机架焊接图"@zh ; ind:revision "B" .
+cad:Motor-Step        a ind:CADModel ; rdfs:label "电机 STEP"@zh     ; ind:revision "A" .
+
+################################  场地  ######################################
+site:PlantShanghai a ind:PhysicalObject ; rdfs:label "上海工厂"@zh .
+
+################################  设备  ######################################
+# 只声明显式事实：类型 Equipment、序列号、所在场地、受安全要求约束（→ 推理出 SafetyEquipment）
+eq:Press01 a ind:Equipment ;
+    rdfs:label "液压冲压机 P-01"@zh ;
+    ind:hasSerialNumber "P01-2026-001" ;
+    ind:hasMass 12500.0 ;
+    ind:locatedIn site:PlantShanghai ;
+    ind:governedBy req:CE-Machinery ;
+    ind:specifiedIn cad:Press01-Assembly ;
+    ind:hasPart asm:Frame , asm:Drive .
+
+# 【缺陷 1】缺少 hasSerialNumber —— SHACL 会报
+eq:Pump07 a ind:Equipment ;
+    rdfs:label "冷却泵 07"@zh ;
+    ind:hasMass 320.5 ;
+    ind:hasPart p:Seal_01 .
+
+################################  部件  ######################################
+asm:Frame a ind:Part ;
+    rdfs:label "机架总成"@zh ;
+    ind:hasMaterial mat:Steel ;
+    ind:partOf eq:Press01 ;
+    ind:hasPart p:Bolt_M8 , p:Weld_01 ;
+    ind:specifiedIn cad:Frame-Drawing .
+
+asm:Drive a ind:Part ;
+    rdfs:label "驱动单元"@zh ;
+    ind:hasMaterial mat:Aluminum ;
+    ind:partOf eq:Press01 ;
+    ind:hasPart p:Motor_M .
+
+################################  零件  ######################################
+p:Motor_M a ind:Part ;
+    rdfs:label "伺服电机 M"@zh ;
+    ind:partOf asm:Drive ;
+    ind:realizesFunction fn:Drive ;
+    ind:specifiedIn cad:Motor-Step .
+    # 【缺陷 2】缺少 hasMaterial —— SHACL 会报
+
+p:Bolt_M8 a ind:Part ;
+    rdfs:label "M8 螺栓"@zh ;
+    ind:partOf asm:Frame ;
+    ind:realizesFunction fn:Fasten ;
+    ind:hasMaterial mat:Steel .
+
+p:Weld_01 a ind:Part ;
+    rdfs:label "焊缝 01"@zh ;
+    ind:partOf asm:Frame ;
+    ind:realizesFunction fn:BearLoad ;
+    ind:hasMaterial mat:Steel .
+
+# 【缺陷 3】缺质量、也未登记 CAD。它不在安全设备下，所以不会被 SHACL 强制；
+# 这类"可选完整性"交给诊断查询（queries/q4_integrity.rq），而不是把约束堆到爆。
+p:Seal_01 a ind:Part ;
+    rdfs:label "机械密封"@zh ;
+    ind:partOf eq:Pump07 ;
+    ind:hasMaterial mat:Steel .
+
+################################  过程  ######################################
+eq:Task-ReplaceSeal a ind:MaintenanceTask ;
+    rdfs:label "更换机械密封"@zh ;
+    ind:actsOn eq:Pump07 .

@@ -1,0 +1,9 @@
+@prefix ind: <https://example.org/ind#> .
+@prefix bad: <https://example.org/ind/bad/> .
+@prefix rdfs: <http://www.w3.org/2000/01/rdf-schema#> .
+
+# 故意制造的不一致样本：同一个体既是 Equipment 又是 Part。
+# 这两个类在 TBox 里声明了 owl:disjointWith —— OWL 的"一致性检查"在这里的价值：
+# 它能发现"数据本身不可能成立"，而不是"字段没填"。
+bad:Ghost a ind:Equipment , ind:Part ;
+    rdfs:label "幽灵物件"@zh .

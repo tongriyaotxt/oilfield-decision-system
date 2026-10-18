@@ -1,0 +1,13 @@
+﻿# 运行产物
+build/
+*.db
+*.log
+*.jsonl
+__pycache__/
+*.pyc
+
+# 本地临时
+probe*.py
+*_run.txt
+.venv/
+.DS_Store

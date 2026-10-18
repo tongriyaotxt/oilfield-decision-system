@@ -1,0 +1,248 @@
+@prefix ind:  <https://example.org/ind#> .
+@prefix well: <https://example.org/well#> .
+@prefix w:    <https://example.org/well/w/> .
+@prefix crit: <https://example.org/well/crit/> .
+@prefix m:    <https://example.org/well/metric/> .
+@prefix st:   <https://example.org/well/state/> .
+@prefix tr:   <https://example.org/well/trait/> .
+@prefix owl:  <http://www.w3.org/2002/07/owl#> .
+@prefix rdf:  <http://www.w3.org/1999/02/22-rdf-syntax-ns#> .
+@prefix rdfs: <http://www.w3.org/2000/01/rdf-schema#> .
+@prefix xsd:  <http://www.w3.org/2001/XMLSchema#> .
+@prefix skos: <http://www.w3.org/2004/02/skos/core#> .
+
+##############################################################################
+# 油田间开子本体：井台账(TBox+ABox) + 状态机 + 判据 + 决策
+#
+# 定位：本体在这里**不负责算**，负责三件事——
+#   1) 台账：几何参数(depth/D/S/n/A)、井的性状(稠油/出砂/故障)的唯一来源；
+#   2) 词汇：开井/关井/维持/升级人工是四个互斥的决策类，判据是可引用的个体；
+#   3) 审计：每条决策必须挂"凭什么"(justifiedBy)和"看哪条数据"(basedOn)，
+#      否则 SHACL 直接判不合格 —— 这就是无人化场景下的可追溯性。
+# 数值计算(速率回归、占空比)在 scripts/intermittent.py，判据阈值挂在本体上。
+##############################################################################
+
+<https://example.org/well> a owl:Ontology ;
+    rdfs:label "Intermittent Production Ontology"@en , "油井间开与开关井决策本体"@zh ;
+    owl:versionIRI <https://example.org/well/1.0.0> ;
+    owl:imports <https://example.org/ind> ;
+    skos:note "与工业产品结构本体共用上层三分：井/设备是 Continuant，决策与观测是 InformationEntity，抽汲是 Occurrent。"@zh .
+
+###########################  1. 井与举升设备  ################################
+
+well:OilWell a owl:Class ;
+    rdfs:subClassOf ind:PhysicalObject ;
+    rdfs:label "OilWell"@en , "油井"@zh ;
+    owl:disjointWith well:PumpingUnit .
+
+well:ArtificialLiftSystem a owl:Class ;
+    rdfs:subClassOf ind:PhysicalObject ;
+    rdfs:label "ArtificialLiftSystem"@en , "人工举升系统"@zh .
+
+well:PumpingUnit a owl:Class ;
+    rdfs:subClassOf well:ArtificialLiftSystem ;
+    rdfs:label "PumpingUnit"@en , "地面抽油机"@zh .
+
+well:DownholePump a owl:Class ;
+    rdfs:subClassOf well:ArtificialLiftSystem ;
+    rdfs:label "DownholePump"@en , "井下泵"@zh .
+
+well:Trait a owl:Class ;
+    rdfs:subClassOf ind:Entity ;
+    rdfs:label "Trait"@en , "井的性状"@zh ;
+    skos:definition "影响开关井可行性的固有/工况属性：稠油、出砂、故障锁定。"@zh .
+
+tr:HeavyOil  a well:Trait ; rdfs:label "稠油易凝"@zh ;
+    skos:note "关井过长有凝管、蜡卡风险，必须限制单次关井时长。"@zh .
+tr:SandProne a well:Trait ; rdfs:label "出砂敏感"@zh .
+tr:GasLock   a well:Trait ; rdfs:label "易气锁"@zh .
+tr:FaultLock a well:Trait ; rdfs:label "故障锁定"@zh ;
+    skos:note "存在过载/缺相等故障，禁止自动开井，只能人工处置。"@zh .
+
+# ── 寒区（吉林）特有性状 ────────────────────────────────────────────────
+tr:WinterFreeze a well:Trait ; rdfs:label "冬季冻结风险"@zh ;
+    skos:note "东北冬季井口/管线有冻堵、凝管风险，单次关井必须比常规更短；11月—次年3月强制生效。"@zh .
+
+tr:CO2Breakthrough a well:Trait ; rdfs:label "CO2 气窜/气锁敏感"@zh ;
+    skos:note "CCUS 驱油井：关井后注采压差重组会加剧气窜，且井筒气液比升高易气锁。这类井的开关井必须更短、更频繁，并与注入端联动。"@zh .
+
+tr:GreenPowerFlex a well:Trait ; rdfs:label "可参与绿电柔性调节"@zh ;
+    skos:note "抽油机/注水泵可作为可中断负荷跟随风光出力与峰谷电价，但要与最小关井时长联合求解。"@zh .
+
+###########################  2. 观测与指标  ##################################
+
+well:Metric a owl:Class ;
+    rdfs:subClassOf ind:Entity ;
+    rdfs:label "Metric"@en , "可观测指标"@zh .
+
+m:FluidLevel     a well:Metric ; rdfs:label "动液面深度"@zh ; well:hasUnit "m" .
+m:Submergence    a well:Metric ; rdfs:label "沉没度"@zh ;     well:hasUnit "m" ;
+    skos:definition "泵挂深度 − 动液面深度。0 表示泵已露出液面，吸入失效。"@zh .
+m:PumpEfficiency a well:Metric ; rdfs:label "泵效(充满系数)"@zh ; well:hasUnit "1" ;
+    skos:definition "实际产液 / (理论排量 × 运行时间)。"@zh .
+m:LiquidRate     a well:Metric ; rdfs:label "产液量"@zh ;     well:hasUnit "m3/d" .
+m:MotorCurrent   a well:Metric ; rdfs:label "电机电流"@zh ;  well:hasUnit "A" .
+m:RiseRate       a well:Metric ; rdfs:label "沉没度恢复速率"@zh ; well:hasUnit "m/h" ;
+    skos:note "关井段回归得到，是估算供液能力的唯一可靠现场信号。"@zh .
+
+well:Measurement a owl:Class ;
+    rdfs:subClassOf ind:InformationEntity ;
+    rdfs:label "Measurement"@en , "观测值"@zh .
+
+well:Sensor a owl:Class ;
+    rdfs:subClassOf ind:PhysicalObject ;
+    rdfs:label "Sensor"@en , "传感器"@zh .
+
+###########################  3. 运行状态机  ##################################
+
+well:OperatingState a owl:Class ;
+    rdfs:subClassOf ind:Entity ;
+    rdfs:label "OperatingState"@en , "运行状态"@zh .
+
+st:Producing       a well:OperatingState ; rdfs:label "开井生产"@zh .
+st:ShutIn          a well:OperatingState ; rdfs:label "关井"@zh .
+st:AwaitingRecovery a well:OperatingState ; rdfs:label "关井恢复中"@zh .
+st:Faulted         a well:OperatingState ; rdfs:label "故障停机"@zh .
+
+st:Producing owl:disjointWith st:ShutIn , st:Faulted .
+st:ShutIn    owl:disjointWith st:Faulted .
+
+###########################  4. 判据（阈值挂在这里）  ########################
+
+well:Criterion a owl:Class ;
+    rdfs:subClassOf ind:InformationEntity ;
+    rdfs:label "Criterion"@en , "判据"@zh .
+
+crit:LowSubmergence a well:Criterion ;
+    rdfs:label "沉没度不足"@zh ;
+    well:hasThreshold 30 ; well:hasUnit "m" ;
+    skos:definition "沉没度低于阈值且持续 N 分钟 → 应关井恢复。"@zh .
+
+crit:LowEfficiency a well:Criterion ;
+    rdfs:label "泵效过低"@zh ;
+    well:hasThreshold 0.30 ; well:hasUnit "1" ;
+    skos:definition "泵效低于 30% → 抽汲能力明显过剩，具备间开价值。"@zh .
+
+crit:Recovered a well:Criterion ;
+    rdfs:label "沉没度恢复到位"@zh ;
+    well:hasThreshold 120 ; well:hasUnit "m" ;
+    skos:definition "沉没度恢复到目标值 → 应开井。"@zh .
+
+crit:MinOffTime a well:Criterion ;
+    rdfs:label "最小关井时长"@zh ;
+    well:hasThreshold 4 ; well:hasUnit "h" ;
+    skos:definition "关井不得短于该值，避免频繁启停损伤电机与抽油机。"@zh .
+
+crit:HeavyOilOffLimit a well:Criterion ;
+    rdfs:label "稠油单次关井上限"@zh ;
+    well:hasThreshold 8 ; well:hasUnit "h" ;
+    skos:definition "稠油井关井过长会凝管/蜡卡，必须封顶。"@zh .
+
+crit:FaultLockout a well:Criterion ;
+    rdfs:label "故障锁定"@zh ;
+    skos:definition "故障状态下禁止任何自动开井决策，只能升级人工。"@zh .
+
+crit:CandidateScreen a well:Criterion ;
+    rdfs:label "间开准入筛选"@zh ;
+    skos:definition "需同时满足：泵效低于阈值、沉没度长期偏低、有可靠恢复速率样本；否则不进间开。"@zh .
+
+crit:WinterOffLimit a well:Criterion ;
+    rdfs:label "寒区冬季单次关井上限"@zh ;
+    well:hasThreshold 6 ; well:hasUnit "h" ;
+    skos:definition "11月—次年3月，单次关井不得超过 6h，防止井口冻堵与管内凝油。"@zh .
+
+crit:CO2FloodOffLimit a well:Criterion ;
+    rdfs:label "CCUS 驱油井单次关井上限"@zh ;
+    well:hasThreshold 4 ; well:hasUnit "h" ;
+    skos:definition "CO2 气窜敏感井关井过久会加剧气窜与气锁，上限 4h，并需注入端同步降注。"@zh .
+
+crit:PeakShaving a well:Criterion ;
+    rdfs:label "峰谷电价避峰"@zh ;
+    skos:note "在满足最小关井时长与产量约束的前提下，把运行时段向低谷电价/高风光出力时段平移。"@zh .
+
+###########################  5. 决策与策略  ##################################
+
+well:Decision a owl:Class ;
+    rdfs:subClassOf ind:InformationEntity ;
+    rdfs:label "Decision"@en , "开关井决策"@zh .
+
+well:StartDecision  a owl:Class ; rdfs:subClassOf well:Decision ; rdfs:label "开井决策"@zh .
+well:ShutInDecision a owl:Class ; rdfs:subClassOf well:Decision ; rdfs:label "关井决策"@zh .
+well:HoldDecision   a owl:Class ; rdfs:subClassOf well:Decision ; rdfs:label "维持决策"@zh .
+well:EscalateDecision a owl:Class ; rdfs:subClassOf well:Decision ; rdfs:label "升级人工"@zh .
+
+well:StartDecision owl:disjointWith well:ShutInDecision , well:HoldDecision , well:EscalateDecision .
+well:ShutInDecision owl:disjointWith well:HoldDecision , well:EscalateDecision .
+well:HoldDecision owl:disjointWith well:EscalateDecision .
+
+well:Strategy a owl:Class ;
+    rdfs:subClassOf ind:InformationEntity ;
+    rdfs:label "Strategy"@en , "举升策略"@zh .
+
+well:ContinuousProduction a well:Strategy ; rdfs:label "连续生产"@zh .
+well:IntermittentProduction a well:Strategy ; rdfs:label "间开生产"@zh .
+well:VariableSpeedRetrofit a well:Strategy ; rdfs:label "降冲次/换小泵改造"@zh ;
+    skos:note "占空比在 0.35~0.85 时，调参往往优于频繁启停。"@zh .
+well:HumanIntervention a well:Strategy ; rdfs:label "人工处置"@zh .
+
+###########################  6. 属性  ########################################
+
+well:hasState a owl:ObjectProperty ; rdfs:domain well:OilWell ; rdfs:range well:OperatingState .
+well:hasTrait a owl:ObjectProperty ; rdfs:domain well:OilWell ; rdfs:range well:Trait .
+well:hasMeasurement a owl:ObjectProperty ; rdfs:domain well:OilWell ; rdfs:range well:Measurement .
+well:ofMetric a owl:ObjectProperty ; rdfs:domain well:Measurement ; rdfs:range well:Metric .
+well:basedOn a owl:ObjectProperty ; rdfs:domain well:Decision ; rdfs:range well:Measurement ;
+    rdfs:label "基于数据"@zh .
+well:justifiedBy a owl:ObjectProperty ; rdfs:domain well:Decision ; rdfs:range well:Criterion ;
+    rdfs:label "依据判据"@zh .
+well:decidesFor a owl:ObjectProperty ; rdfs:domain well:Decision ; rdfs:range well:OilWell ;
+    rdfs:label "决策对象"@zh .
+well:recommends a owl:ObjectProperty ; rdfs:domain well:Decision ; rdfs:range well:Strategy .
+
+well:pumpDepth    a owl:DatatypeProperty ; rdfs:domain well:OilWell ; rdfs:range xsd:decimal .
+well:pumpDiameter a owl:DatatypeProperty ; rdfs:domain well:OilWell ; rdfs:range xsd:decimal .
+well:strokeLength a owl:DatatypeProperty ; rdfs:domain well:OilWell ; rdfs:range xsd:decimal .
+well:strokeRate   a owl:DatatypeProperty ; rdfs:domain well:OilWell ; rdfs:range xsd:decimal .
+well:annularArea  a owl:DatatypeProperty ; rdfs:domain well:OilWell ; rdfs:range xsd:decimal .
+
+well:hasValue     a owl:DatatypeProperty ; rdfs:domain well:Measurement ; rdfs:range xsd:decimal .
+well:atTime       a owl:DatatypeProperty ; rdfs:domain well:Measurement ; rdfs:range xsd:dateTime .
+well:hasThreshold a owl:DatatypeProperty ; rdfs:range xsd:decimal .
+well:hasUnit      a owl:DatatypeProperty ; rdfs:range xsd:string .
+
+well:hasCycleOnHours  a owl:DatatypeProperty ; rdfs:domain well:Decision ; rdfs:range xsd:decimal .
+well:hasCycleOffHours a owl:DatatypeProperty ; rdfs:domain well:Decision ; rdfs:range xsd:decimal .
+well:hasDutyRatio     a owl:DatatypeProperty ; rdfs:domain well:Decision ; rdfs:range xsd:decimal .
+well:estimatedInflow  a owl:DatatypeProperty ; rdfs:domain well:OilWell ; rdfs:range xsd:decimal .
+well:confidence       a owl:DatatypeProperty ; rdfs:domain well:Decision ; rdfs:range xsd:string .
+well:createdAt        a owl:DatatypeProperty ; rdfs:domain well:Decision ; rdfs:range xsd:dateTime .
+well:note             a owl:DatatypeProperty ; rdfs:range xsd:string .
+
+###########################  7. 井台账（12 口）##############################
+# 只放现场"确实知道"的几何/工况参数；供液能力 qi 属于未知量，由恢复速率反演，
+# 所以这里刻意不写 qi —— 它是脚本的输出，不是台账的输入。
+
+w:W01 a well:OilWell ; rdfs:label "W01 低渗长停井"@zh ; well:hasState st:Producing ;
+    well:pumpDepth 1200 ; well:pumpDiameter 44 ; well:strokeLength 3.0 ; well:strokeRate 4 ; well:annularArea 0.012 .
+w:W02 a well:OilWell ; rdfs:label "W02 边部井"@zh ; well:hasState st:Producing ;
+    well:pumpDepth 1350 ; well:pumpDiameter 44 ; well:strokeLength 3.0 ; well:strokeRate 4 ; well:annularArea 0.012 .
+w:W03 a well:OilWell ; rdfs:label "W03 小泵井"@zh ; well:hasState st:Producing ;
+    well:pumpDepth 1100 ; well:pumpDiameter 38 ; well:strokeLength 2.5 ; well:strokeRate 5 ; well:annularArea 0.012 .
+w:W04 a well:OilWell ; rdfs:label "W04 深井低液"@zh ; well:hasState st:Producing ;
+    well:pumpDepth 1500 ; well:pumpDiameter 44 ; well:strokeLength 3.0 ; well:strokeRate 3 ; well:annularArea 0.012 .
+w:W05 a well:OilWell ; rdfs:label "W05 中产井"@zh ; well:hasState st:Producing ;
+    well:pumpDepth 1000 ; well:pumpDiameter 56 ; well:strokeLength 3.0 ; well:strokeRate 4 ; well:annularArea 0.014 .
+w:W06 a well:OilWell ; rdfs:label "W06 常规井"@zh ; well:hasState st:Producing ;
+    well:pumpDepth 1250 ; well:pumpDiameter 44 ; well:strokeLength 3.0 ; well:strokeRate 4 ; well:annularArea 0.012 .
+w:W07 a well:OilWell ; rdfs:label "W07 稠油井"@zh ; well:hasState st:Producing ; well:hasTrait tr:HeavyOil ;
+    well:pumpDepth 1400 ; well:pumpDiameter 38 ; well:strokeLength 2.5 ; well:strokeRate 4 ; well:annularArea 0.010 .
+w:W08 a well:OilWell ; rdfs:label "W08 高产液井"@zh ; well:hasState st:Producing ;
+    well:pumpDepth 1300 ; well:pumpDiameter 44 ; well:strokeLength 3.0 ; well:strokeRate 5 ; well:annularArea 0.012 .
+w:W09 a well:OilWell ; rdfs:label "W09 供液充足井(被误间开)"@zh ; well:hasState st:Producing ;
+    well:pumpDepth 900 ; well:pumpDiameter 44 ; well:strokeLength 3.0 ; well:strokeRate 4 ; well:annularArea 0.014 .
+w:W10 a well:OilWell ; rdfs:label "W10 供液充足井(被误间开)"@zh ; well:hasState st:Producing ;
+    well:pumpDepth 1150 ; well:pumpDiameter 56 ; well:strokeLength 3.0 ; well:strokeRate 5 ; well:annularArea 0.016 .
+w:W11 a well:OilWell ; rdfs:label "W11 严重供液不足"@zh ; well:hasState st:Producing ;
+    well:pumpDepth 1600 ; well:pumpDiameter 44 ; well:strokeLength 3.0 ; well:strokeRate 3 ; well:annularArea 0.010 .
+w:W12 a well:OilWell ; rdfs:label "W12 故障停机井"@zh ; well:hasState st:Faulted ; well:hasTrait tr:FaultLock ;
+    well:pumpDepth 1200 ; well:pumpDiameter 44 ; well:strokeLength 3.0 ; well:strokeRate 4 ; well:annularArea 0.012 .

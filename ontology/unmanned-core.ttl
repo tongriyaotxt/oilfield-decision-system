@@ -1,0 +1,166 @@
+@prefix um:   <https://example.org/um#> .
+@prefix s:    <https://example.org/um/s/> .
+@prefix cap:  <https://example.org/um/cap/> .
+@prefix lvl:  <https://example.org/um/lvl/> .
+@prefix owl:  <http://www.w3.org/2002/07/owl#> .
+@prefix rdf:  <http://www.w3.org/1999/02/22-rdf-syntax-ns#> .
+@prefix rdfs: <http://www.w3.org/2000/01/rdf-schema#> .
+@prefix xsd:  <http://www.w3.org/2001/XMLSchema#> .
+@prefix skos: <http://www.w3.org/2004/02/skos/core#> .
+
+##############################################################################
+# 数字化 / 无人化 能力与等级模型
+#
+# 解决的问题：无人化最容易被"宣布"，最难被"验证"。
+# 一个站到底算不算无人值守，不该由验收会拍板，而应由能力清单判定：
+#   具备某等级**全部**必需能力 → 才是该等级；缺一项就是"假无人"。
+# 本文件把等级、能力、投资、人员口径全部建模，脚本据此自动审计。
+##############################################################################
+
+<https://example.org/um> a owl:Ontology ;
+    rdfs:label "Digitalization & Unmanned Operation Ontology"@en ;
+    rdfs:label "数字化与无人化能力模型"@zh ;
+    owl:versionIRI <https://example.org/um/1.0.0> .
+
+###########################  1. 站点类型  ####################################
+
+um:Station a owl:Class ; rdfs:label "Station"@en , "站点"@zh .
+
+um:WellPad         a owl:Class ; rdfs:subClassOf um:Station ; rdfs:label "井场"@zh .
+um:MeteringStation a owl:Class ; rdfs:subClassOf um:Station ; rdfs:label "计量间/阀组间"@zh .
+um:TransferStation a owl:Class ; rdfs:subClassOf um:Station ; rdfs:label "中转站"@zh .
+um:CentralPlant    a owl:Class ; rdfs:subClassOf um:Station ; rdfs:label "联合站/处理站"@zh .
+um:GasStation      a owl:Class ; rdfs:subClassOf um:Station ; rdfs:label "集气站/气处理站"@zh .
+um:ValveStation    a owl:Class ; rdfs:subClassOf um:Station ; rdfs:label "长输管道阀室"@zh .
+um:RenewableSite   a owl:Class ; rdfs:subClassOf um:Station ; rdfs:label "风光场站"@zh .
+
+###########################  2. 无人化等级  ##################################
+# L0 全人工 → L1 可看 → L2 可控 → L3 无人值守（正常无人、异常派人）
+# → L4 无人化自治（异常自愈、人只做监督与应急）
+
+um:AutonomyLevel a owl:Class ; rdfs:label "AutonomyLevel"@en , "无人化等级"@zh .
+um:levelIndex a owl:DatatypeProperty ; rdfs:domain um:AutonomyLevel ; rdfs:range xsd:integer .
+um:requiresCapability a owl:ObjectProperty ; rdfs:domain um:AutonomyLevel ; rdfs:range um:Capability .
+
+lvl:L0 a um:AutonomyLevel ; rdfs:label "L0 全人工"@zh ; um:levelIndex 0 ;
+    skos:definition "无遥测，全部现场操作。"@zh .
+lvl:L1 a um:AutonomyLevel ; rdfs:label "L1 遥测（可看不可动）"@zh ; um:levelIndex 1 ;
+    um:requiresCapability cap:C9 ;
+    skos:definition "数据上得来，指令下不去；仍需驻站或巡井。"@zh .
+lvl:L2 a um:AutonomyLevel ; rdfs:label "L2 远程可控"@zh ; um:levelIndex 2 ;
+    um:requiresCapability cap:C9 , cap:C1 , cap:C3 ;
+    skos:definition "能远程启停与调参，但需人工确认、需现场值守兜底。"@zh .
+lvl:L3 a um:AutonomyLevel ; rdfs:label "L3 无人值守"@zh ; um:levelIndex 3 ;
+    um:requiresCapability cap:C9 , cap:C1 , cap:C3 , cap:C2 , cap:C4 , cap:C5 , cap:C6 , cap:C10 ;
+    skos:definition "正常工况无人；异常自动告警并派应急队，30min 内可达。"@zh .
+lvl:L4 a um:AutonomyLevel ; rdfs:label "L4 无人化自治"@zh ; um:levelIndex 4 ;
+    um:requiresCapability cap:C9 , cap:C1 , cap:C3 , cap:C2 , cap:C4 , cap:C5 , cap:C6 ,
+        cap:C7 , cap:C8 , cap:C10 , cap:C11 , cap:C12 ;
+    skos:definition "异常可自愈（自动切换/降级/重调度），人只在监控中心与应急队；操作规程与授权已修订。"@zh .
+
+###########################  3. 能力项（含投资与人员口径）  ##################
+# capexWan：该能力的一次性投资（万元/站，含安装调试），用于算差距投资
+# 注意：这些是**参数**，落地时用实际询价替换。
+
+um:Capability a owl:Class ; rdfs:label "Capability"@en , "无人化能力项"@zh .
+um:capexWan a owl:DatatypeProperty ; rdfs:domain um:Capability ; rdfs:range xsd:decimal .
+um:capNote a owl:DatatypeProperty ; rdfs:domain um:Capability ; rdfs:range xsd:string .
+
+cap:C9 a um:Capability ; rdfs:label "C9 数字台账与统一编码"@zh ;
+    um:capexWan 1.0 ; um:capNote "井/站/管/阀唯一编码、对象模型、数据入湖；无人化的前提。"@zh .
+cap:C1 a um:Capability ; rdfs:label "C1 远程启停与调参"@zh ;
+    um:capexWan 8.0 ; um:capNote "抽油机/泵/阀远程启停、变频调参；含执行回路改造。"@zh .
+cap:C3 a um:Capability ; rdfs:label "C3 双通道通信冗余"@zh ;
+    um:capexWan 6.0 ; um:capNote "光纤/4G 主用 + 北斗短报文备用；断网仍可上报与执行本地策略。"@zh .
+cap:C2 a um:Capability ; rdfs:label "C2 独立安全联锁（SIL2）"@zh ;
+    um:capexWan 15.0 ; um:capNote "联锁逻辑独立于主控，超压/超温/可燃气体/H2S 自动切断。"@zh .
+cap:C4 a um:Capability ; rdfs:label "C4 断电自治与本地规则"@zh ;
+    um:capexWan 5.0 ; um:capNote "UPS ≥2h + 边缘控制器内置规则，断电断网时执行 fail-safe。"@zh .
+cap:C5 a um:Capability ; rdfs:label "C5 视频+周界+声光告警"@zh ;
+    um:capexWan 12.0 ; um:capNote "无人站最大现实风险是入侵与破坏；红外/雷达周界 + 声光驱离。"@zh .
+cap:C6 a um:Capability ; rdfs:label "C6 泄漏与工况检测"@zh ;
+    um:capexWan 10.0 ; um:capNote "压力/温度/流量/可燃气体/硫化氢 + 管线光纤测漏。"@zh .
+cap:C7 a um:Capability ; rdfs:label "C7 流程自动切换"@zh ;
+    um:capexWan 25.0 ; um:capNote "电动阀组 + 流程自动倒换（清管、旁通、事故隔离），替代人工倒流程。"@zh .
+cap:C8 a um:Capability ; rdfs:label "C8 机器人/无人机巡检替代"@zh ;
+    um:capexWan 8.0 ; um:capNote "区域级机器人/无人机按站摊销，替代人工巡检路径。"@zh .
+cap:C10 a um:Capability ; rdfs:label "C10 应急响应半径 ≤30min"@zh ;
+    um:capexWan 2.0 ; um:capNote "应急保障队布点、冬季道路预案、备件前置。"@zh .
+cap:C11 a um:Capability ; rdfs:label "C11 操作规程与授权修订"@zh ;
+    um:capexWan 0.5 ; um:capNote "无人值守专项规程、自动指令授权边界、责任界定；没有这条，L4 不成立。"@zh .
+cap:C12 a um:Capability ; rdfs:label "C12 区域集中监控中心"@zh ;
+    um:capexWan 3.0 ; um:capNote "按区域摊销：值班、告警分级、远程处置、数据分析岗。"@zh .
+
+###########################  4. 属性  ########################################
+
+um:hasCapability a owl:ObjectProperty ; rdfs:domain um:Station ; rdfs:range um:Capability .
+um:atLevel a owl:ObjectProperty ; rdfs:domain um:Station ; rdfs:range um:AutonomyLevel ;
+    rdfs:label "当前等级（应等于能力清单推出的等级）"@zh .
+um:targetLevel a owl:ObjectProperty ; rdfs:domain um:Station ; rdfs:range um:AutonomyLevel .
+um:servesWells a owl:DatatypeProperty ; rdfs:domain um:Station ; rdfs:range xsd:integer .
+um:staffOnSite a owl:DatatypeProperty ; rdfs:domain um:Station ; rdfs:range xsd:decimal ;
+    rdfs:label "当前驻站人数（当量）"@zh .
+
+###########################  4b. 审计结论（脚本产出）  #######################
+
+um:Audit a owl:Class ; rdfs:label "Audit"@en , "无人化准入审计结论"@zh .
+um:auditsStation a owl:ObjectProperty ; rdfs:domain um:Audit ; rdfs:range um:Station .
+um:declaredLevel a owl:ObjectProperty ; rdfs:domain um:Audit ; rdfs:range um:AutonomyLevel .
+um:achievedLevel a owl:ObjectProperty ; rdfs:domain um:Audit ; rdfs:range um:AutonomyLevel .
+um:gapCapability a owl:ObjectProperty ; rdfs:domain um:Audit ; rdfs:range um:Capability .
+um:gapCapexWan a owl:DatatypeProperty ; rdfs:domain um:Audit ; rdfs:range xsd:decimal .
+um:isFakeUnmanned a owl:DatatypeProperty ; rdfs:domain um:Audit ; rdfs:range xsd:boolean ;
+    rdfs:label "假无人标记"@zh .
+
+###########################  5. 站点台账（示例 12 个）  ######################
+# 现状刻意做成"等级不齐、有假无人"：中转站自称 L3 但缺 C4 断电自治，
+# 用于证明审计器能抓出"宣布了但没能力"的站。
+
+s:P01 a um:WellPad ; rdfs:label "P01 井场"@zh ; um:servesWells 1 ; um:staffOnSite 0 ;
+    um:atLevel lvl:L1 ; um:targetLevel lvl:L4 ;
+    um:hasCapability cap:C9 .
+
+s:P02 a um:WellPad ; rdfs:label "P02 井场（含 8 井式平台）"@zh ; um:servesWells 8 ; um:staffOnSite 0 ;
+    um:atLevel lvl:L1 ; um:targetLevel lvl:L4 ;
+    um:hasCapability cap:C9 .
+
+s:M01 a um:MeteringStation ; rdfs:label "M01 计量间"@zh ; um:servesWells 24 ; um:staffOnSite 1 ;
+    um:atLevel lvl:L2 ; um:targetLevel lvl:L4 ;
+    um:hasCapability cap:C9 , cap:C1 , cap:C3 .
+
+s:M02 a um:MeteringStation ; rdfs:label "M02 计量间（寒区偏远）"@zh ; um:servesWells 18 ; um:staffOnSite 1 ;
+    um:atLevel lvl:L2 ; um:targetLevel lvl:L4 ;
+    um:hasCapability cap:C9 , cap:C1 , cap:C3 , cap:C5 .
+
+s:T01 a um:TransferStation ; rdfs:label "T01 中转站（自称 L3）"@zh ; um:servesWells 46 ; um:staffOnSite 4 ;
+    um:atLevel lvl:L3 ; um:targetLevel lvl:L4 ;
+    # 缺 C4（断电自治）——"假无人"典型：一断电就得派人
+    um:hasCapability cap:C9 , cap:C1 , cap:C3 , cap:C2 , cap:C5 , cap:C6 , cap:C10 .
+
+s:T02 a um:TransferStation ; rdfs:label "T02 中转站（已具备 L3）"@zh ; um:servesWells 52 ; um:staffOnSite 0 ;
+    um:atLevel lvl:L3 ; um:targetLevel lvl:L4 ;
+    um:hasCapability cap:C9 , cap:C1 , cap:C3 , cap:C2 , cap:C4 , cap:C5 , cap:C6 , cap:C10 .
+
+s:C01 a um:CentralPlant ; rdfs:label "C01 联合站"@zh ; um:servesWells 210 ; um:staffOnSite 12 ;
+    um:atLevel lvl:L3 ; um:targetLevel lvl:L4 ;
+    um:hasCapability cap:C9 , cap:C1 , cap:C3 , cap:C2 , cap:C4 , cap:C5 , cap:C6 , cap:C10 .
+
+s:C02 a um:CentralPlant ; rdfs:label "C02 联合站（含 CO2 处理）"@zh ; um:servesWells 180 ; um:staffOnSite 14 ;
+    um:atLevel lvl:L2 ; um:targetLevel lvl:L4 ;
+    um:hasCapability cap:C9 , cap:C1 , cap:C3 , cap:C6 .
+
+s:G01 a um:GasStation ; rdfs:label "G01 集气站（长岭火山岩气）"@zh ; um:servesWells 26 ; um:staffOnSite 3 ;
+    um:atLevel lvl:L3 ; um:targetLevel lvl:L4 ;
+    um:hasCapability cap:C9 , cap:C1 , cap:C3 , cap:C2 , cap:C4 , cap:C5 , cap:C6 , cap:C10 .
+
+s:V01 a um:ValveStation ; rdfs:label "V01 长输阀室（CO2 管道）"@zh ; um:servesWells 0 ; um:staffOnSite 0 ;
+    um:atLevel lvl:L2 ; um:targetLevel lvl:L4 ;
+    um:hasCapability cap:C9 , cap:C1 , cap:C3 , cap:C6 .
+
+s:R01 a um:RenewableSite ; rdfs:label "R01 风电场升压站"@zh ; um:servesWells 0 ; um:staffOnSite 2 ;
+    um:atLevel lvl:L3 ; um:targetLevel lvl:L4 ;
+    um:hasCapability cap:C9 , cap:C1 , cap:C3 , cap:C2 , cap:C4 , cap:C5 , cap:C6 , cap:C10 .
+
+s:R02 a um:RenewableSite ; rdfs:label "R02 光伏场站"@zh ; um:servesWells 0 ; um:staffOnSite 1 ;
+    um:atLevel lvl:L2 ; um:targetLevel lvl:L3 ;
+    um:hasCapability cap:C9 , cap:C1 , cap:C3 , cap:C5 .

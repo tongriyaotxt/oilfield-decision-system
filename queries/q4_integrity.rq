@@ -1,0 +1,15 @@
+# Q4：完整性诊断（不是强制约束）——谁缺质量、谁缺模型
+# 与 SHACL 的分工：SHACL 管"不许出现的错误"，这类查询管"值得修的数据债"。
+PREFIX ind:  <https://example.org/ind#>
+PREFIX rdfs: <http://www.w3.org/2000/01/rdf-schema#>
+
+SELECT ?物件 ?标签 ?缺质量 ?缺模型
+WHERE {
+  ?物件 rdf:type ?t .
+  VALUES ?t { ind:Equipment ind:Part }
+  OPTIONAL { ?物件 rdfs:label ?标签 }
+  BIND (IF(EXISTS { ?物件 ind:hasMass ?m }, "有", "缺") AS ?缺质量)
+  BIND (IF(EXISTS { ?物件 ind:specifiedIn ?c }, "有", "缺") AS ?缺模型)
+  FILTER (?缺质量 = "缺" || ?缺模型 = "缺")
+}
+ORDER BY ?物件

@@ -1,0 +1,13 @@
+# Q3：装了安全设备、但自身没有 CAD 建档的零件（合规缺口）
+PREFIX ind:  <https://example.org/ind#>
+PREFIX rdfs: <http://www.w3.org/2000/01/rdf-schema#>
+
+SELECT DISTINCT ?零件 ?标签 ?安全设备
+WHERE {
+  ?零件 rdf:type ind:SafetyRelevantPart .           # 该类型本身是推理得到的
+  ?零件 ind:partOf+ ?安全设备 .
+  ?安全设备 rdf:type ind:SafetyEquipment .
+  FILTER NOT EXISTS { ?零件 ind:specifiedIn ?m }
+  OPTIONAL { ?零件 rdfs:label ?标签 }
+}
+ORDER BY ?零件

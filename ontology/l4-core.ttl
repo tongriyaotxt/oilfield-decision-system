@@ -1,0 +1,171 @@
+@prefix um:   <https://example.org/um#> .
+@prefix s:    <https://example.org/um/s/> .
+@prefix an:   <https://example.org/um/anomaly/> .
+@prefix act:  <https://example.org/um/action/> .
+@prefix cap:  <https://example.org/um/cap/> .
+@prefix lvl:  <https://example.org/um/lvl/> .
+@prefix owl:  <http://www.w3.org/2002/07/owl#> .
+@prefix rdf:  <http://www.w3.org/1999/02/22-rdf-syntax-ns#> .
+@prefix rdfs: <http://www.w3.org/2000/01/rdf-schema#> .
+@prefix xsd:  <http://www.w3.org/2001/XMLSchema#> .
+@prefix skos: <http://www.w3.org/2004/02/skos/core#> .
+
+##############################################################################
+# L4 无人化自治：异常谱系 + 自愈动作库 + 准入判据
+#
+# L4 与 L3 的唯一分界线：
+#   L3 = 正常工况无人，异常了喊人；
+#   L4 = **异常工况也无人**——系统自己检测、自己动作、自己回到安全态，
+#        人只在"自愈失败"或"必须到现场"时才介入。
+# 因此 L4 不能用"能力清单"单独证明，必须同时具备：
+#   ① 能力（能感知、能动作）
+#   ② 自愈策略覆盖（每类异常都有预案动作）
+#   ③ 实测证据（故障注入演练 + 连续无干预运行 + 误动作率）
+#   ④ 授权（规程修订、中心接入、应急半径）
+##############################################################################
+
+<https://example.org/um/l4> a owl:Ontology ;
+    rdfs:label "L4 Autonomous Operation Model"@en , "L4 无人化自治模型"@zh ;
+    owl:imports <https://example.org/um> ;
+    owl:versionIRI <https://example.org/um/l4/1.0.0> .
+
+###########################  1. 异常谱系（L4 必须全覆盖）  ####################
+
+um:Anomaly a owl:Class ; rdfs:label "Anomaly"@en , "异常类型"@zh .
+um:criticalAnomaly a owl:DatatypeProperty ; rdfs:range xsd:boolean ;
+    rdfs:label "是否 L4 必需覆盖"@zh .
+um:requiresAction a owl:ObjectProperty ; rdfs:domain um:Anomaly ; rdfs:range um:SelfHealAction .
+um:coversAnomaly a owl:ObjectProperty ; rdfs:domain um:Station ; rdfs:range um:Anomaly .
+um:detectMinutes a owl:DatatypeProperty ; rdfs:domain um:Anomaly ; rdfs:range xsd:decimal .
+um:mustReachSafeStateIn a owl:DatatypeProperty ; rdfs:domain um:Anomaly ; rdfs:range xsd:decimal ;
+    rdfs:label "必须回到安全态的最长允许时间(min)"@zh .
+
+an:A1 a um:Anomaly ; rdfs:label "A1 供电中断"@zh ; um:criticalAnomaly true ;
+    um:detectMinutes 0.1 ; um:mustReachSafeStateIn 5 .
+an:A2 a um:Anomaly ; rdfs:label "A2 通信中断"@zh ; um:criticalAnomaly true ;
+    um:detectMinutes 5 ; um:mustReachSafeStateIn 30 .
+an:A3 a um:Anomaly ; rdfs:label "A3 执行机构卡涩/失效（阀卡、泵停）"@zh ; um:criticalAnomaly true ;
+    um:detectMinutes 2 ; um:mustReachSafeStateIn 15 .
+an:A4 a um:Anomaly ; rdfs:label "A4 超压/超温"@zh ; um:criticalAnomaly true ;
+    um:detectMinutes 0.2 ; um:mustReachSafeStateIn 2 .
+an:A5 a um:Anomaly ; rdfs:label "A5 泄漏/可燃气体/硫化氢"@zh ; um:criticalAnomaly true ;
+    um:detectMinutes 0.5 ; um:mustReachSafeStateIn 2 .
+an:A6 a um:Anomaly ; rdfs:label "A6 传感器失效/漂移"@zh ; um:criticalAnomaly true ;
+    um:detectMinutes 10 ; um:mustReachSafeStateIn 60 .
+an:A7 a um:Anomaly ; rdfs:label "A7 非法入侵/破坏"@zh ; um:criticalAnomaly true ;
+    um:detectMinutes 1 ; um:mustReachSafeStateIn 10 .
+an:A8 a um:Anomaly ; rdfs:label "A8 CCUS 气窜/气锁"@zh ; um:criticalAnomaly true ;
+    um:detectMinutes 20 ; um:mustReachSafeStateIn 120 .
+
+###########################  2. 自愈动作库  ##################################
+
+um:SelfHealAction a owl:Class ; rdfs:label "SelfHealAction"@en , "自愈动作"@zh ;
+    skos:definition "L4 允许系统自动执行的动作。铁律：只能向更安全、更保守的方向动作（单向安全）。"@zh .
+
+act:H1 a um:SelfHealAction ; rdfs:label "H1 自动切断/隔离"@zh .
+act:H2 a um:SelfHealAction ; rdfs:label "H2 旁通/流程切换"@zh .
+act:H3 a um:SelfHealAction ; rdfs:label "H3 降级运行（降冲次/降配产/降注）"@zh .
+act:H4 a um:SelfHealAction ; rdfs:label "H4 负荷重调度（转旁站/储能/卸载）"@zh .
+act:H5 a um:SelfHealAction ; rdfs:label "H5 自动重启/自恢复"@zh .
+act:H6 a um:SelfHealAction ; rdfs:label "H6 参数回退到保守策略 + 传感器交叉校验"@zh .
+act:H7 a um:SelfHealAction ; rdfs:label "H7 泄压/放空"@zh .
+act:H8 a um:SelfHealAction ; rdfs:label "H8 告警升级 + 自动派单"@zh .
+act:H9 a um:SelfHealAction ; rdfs:label "H9 声光驱离 + 视频复核"@zh .
+
+an:A1 um:requiresAction act:H1 , act:H5 .
+an:A2 um:requiresAction act:H6 , act:H8 .
+an:A3 um:requiresAction act:H2 , act:H3 .
+an:A4 um:requiresAction act:H1 , act:H7 .
+an:A5 um:requiresAction act:H1 , act:H7 , act:H8 .
+an:A6 um:requiresAction act:H6 .
+an:A7 um:requiresAction act:H9 , act:H8 .
+an:A8 um:requiresAction act:H3 , act:H6 .
+
+###########################  3. 自愈动作所需能力（把自愈与投资挂钩）  ##########
+# 缺某项能力，对应异常就无法自愈 —— 这是 L4 投资排序的依据。
+
+um:requiresCapabilityForSelfHeal a owl:ObjectProperty ;
+    rdfs:domain um:Anomaly ; rdfs:range um:Capability .
+
+an:A1 um:requiresCapabilityForSelfHeal cap:C4 , cap:C2 .   # 断电自治 + 联锁
+an:A2 um:requiresCapabilityForSelfHeal cap:C3 .             # 双通道通信
+an:A3 um:requiresCapabilityForSelfHeal cap:C7 , cap:C1 .    # 流程自动切换 + 远程操作
+an:A4 um:requiresCapabilityForSelfHeal cap:C2 .             # 独立联锁
+an:A5 um:requiresCapabilityForSelfHeal cap:C6 , cap:C2 .    # 检测 + 联锁
+an:A6 um:requiresCapabilityForSelfHeal cap:C6 .             # 多参数交叉
+an:A7 um:requiresCapabilityForSelfHeal cap:C5 .             # 视频周界
+an:A8 um:requiresCapabilityForSelfHeal cap:C1 , cap:C6 .    # 远程调参 + 检测
+
+###########################  4. L4 定量准入判据  ##############################
+
+um:L4Criterion a owl:Class ; rdfs:label "L4Criterion"@en , "L4 定量判据"@zh .
+um:criterionName a owl:DatatypeProperty ; rdfs:domain um:L4Criterion ; rdfs:range xsd:string .
+um:threshold a owl:DatatypeProperty ; rdfs:domain um:L4Criterion ; rdfs:range xsd:decimal .
+
+um:crit-AutonomyDays a um:L4Criterion ; um:criterionName "连续无人工干预天数" ; um:threshold 30 ;
+    skos:definition "申报前 30 天内无人工到场、无人工接管（计划检修除外）。"@zh .
+um:crit-SelfHealRate a um:L4Criterion ; um:criterionName "自愈闭环率" ; um:threshold 0.8 ;
+    skos:definition "异常发生时，由系统自动恢复到安全态的比例。"@zh .
+um:crit-FalseAction a um:L4Criterion ; um:criterionName "误动作率(≤)" ; um:threshold 0.01 ;
+    skos:definition "无故停机、误关井、误切除等错误动作占全部动作的比例。"@zh .
+um:crit-DrillPass a um:L4Criterion ; um:criterionName "故障注入演练通过率" ; um:threshold 1.0 ;
+    skos:definition "8 类关键异常的注入演练必须全部通过。"@zh .
+um:crit-EmergencyMinutes a um:L4Criterion ; um:criterionName "应急到场时间(≤min)" ; um:threshold 30 .
+
+###########################  5. 站点的 L4 实证数据  ##########################
+
+um:autonomyDays a owl:DatatypeProperty ; rdfs:domain um:Station ; rdfs:range xsd:integer .um:selfHealRate a owl:DatatypeProperty ; rdfs:domain um:Station ; rdfs:range xsd:decimal .
+um:falseActionRate a owl:DatatypeProperty ; rdfs:domain um:Station ; rdfs:range xsd:decimal .
+um:drillsPassed a owl:DatatypeProperty ; rdfs:domain um:Station ; rdfs:range xsd:integer .
+um:drillsTotal a owl:DatatypeProperty ; rdfs:domain um:Station ; rdfs:range xsd:integer .
+um:procedureRevised a owl:DatatypeProperty ; rdfs:domain um:Station ; rdfs:range xsd:boolean .
+um:centerConnected a owl:DatatypeProperty ; rdfs:domain um:Station ; rdfs:range xsd:boolean .
+um:emergencyMinutes a owl:DatatypeProperty ; rdfs:domain um:Station ; rdfs:range xsd:integer .
+
+# 四个代表站：从"能力够但证据不足"到"证据够但能力不全"，画面不同、补法不同
+
+s:T02 um:autonomyDays 41 ; um:selfHealRate 0.86 ; um:falseActionRate 0.006 ;
+    um:drillsPassed 8 ; um:drillsTotal 8 ; um:procedureRevised true ;
+    um:centerConnected true ; um:emergencyMinutes 25 ;
+    um:coversAnomaly an:A1 , an:A2 , an:A4 , an:A5 , an:A6 , an:A7 .
+
+s:C01 um:autonomyDays 12 ; um:selfHealRate 0.62 ; um:falseActionRate 0.019 ;
+    um:drillsPassed 5 ; um:drillsTotal 8 ; um:procedureRevised false ;
+    um:centerConnected true ; um:emergencyMinutes 35 ;
+    um:coversAnomaly an:A1 , an:A2 , an:A4 , an:A5 .
+
+s:G01 um:autonomyDays 33 ; um:selfHealRate 0.78 ; um:falseActionRate 0.008 ;
+    um:drillsPassed 7 ; um:drillsTotal 8 ; um:procedureRevised true ;
+    um:centerConnected true ; um:emergencyMinutes 28 ;
+    um:coversAnomaly an:A1 , an:A2 , an:A3 , an:A4 , an:A5 , an:A6 , an:A7 .
+
+s:P01 um:autonomyDays 3 ; um:selfHealRate 0.30 ; um:falseActionRate 0.040 ;
+    um:drillsPassed 2 ; um:drillsTotal 8 ; um:procedureRevised false ;
+    um:centerConnected false ; um:emergencyMinutes 55 ;
+    um:coversAnomaly an:A6 .
+
+# 示范站：能力齐、证据齐、授权齐 —— L4 闸门应当放行（用来证明闸门不是"永远不通过"）
+s:T03 a um:TransferStation ; rdfs:label "T03 中转站（L4 示范）"@zh ;
+    um:servesWells 40 ; um:staffOnSite 0 ;
+    um:atLevel lvl:L4 ; um:targetLevel lvl:L4 ;
+    um:hasCapability cap:C9 , cap:C1 , cap:C3 , cap:C2 , cap:C4 , cap:C5 , cap:C6 ,
+        cap:C7 , cap:C8 , cap:C10 , cap:C11 , cap:C12 ;
+    um:coversAnomaly an:A1 , an:A2 , an:A3 , an:A4 , an:A5 , an:A6 , an:A7 , an:A8 ;
+    um:autonomyDays 47 ; um:selfHealRate 0.92 ; um:falseActionRate 0.004 ;
+    um:drillsPassed 8 ; um:drillsTotal 8 ; um:procedureRevised true ;
+    um:centerConnected true ; um:emergencyMinutes 22 .
+
+###########################  6. L4 评估报告（l4_gate.py 产出）  ##############
+
+um:L4Report a owl:Class ; rdfs:label "L4Report"@en , "L4 准入评估结论"@zh .
+um:l4Passed a owl:DatatypeProperty ; rdfs:domain um:L4Report ; rdfs:range xsd:boolean .
+um:selfHealCoverage a owl:DatatypeProperty ; rdfs:domain um:L4Report ; rdfs:range xsd:string ;
+    rdfs:label "自愈覆盖（通过/关键异常总数）"@zh .
+um:uncoveredAnomaly a owl:ObjectProperty ; rdfs:domain um:L4Report ; rdfs:range um:Anomaly .
+um:estimatedMonths a owl:DatatypeProperty ; rdfs:domain um:L4Report ; rdfs:range xsd:integer ;
+    rdfs:label "距达到 L4 的估计工期（月）"@zh .
+
+# 已配置部分自愈策略的 L3 站（现实里"能力够、策略配了一半"的典型状态）
+s:R01 um:coversAnomaly an:A1 , an:A2 , an:A4 , an:A5 , an:A6 .
+s:T01 um:coversAnomaly an:A1 , an:A2 , an:A4 , an:A5 .
+s:R02 um:coversAnomaly an:A1 , an:A2 , an:A6 .

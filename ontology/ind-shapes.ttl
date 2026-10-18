@@ -1,0 +1,97 @@
+@prefix sh:   <http://www.w3.org/ns/shacl#> .
+@prefix ind:  <https://example.org/ind#> .
+@prefix owl:  <http://www.w3.org/2002/07/owl#> .
+@prefix xsd:  <http://www.w3.org/2001/XMLSchema#> .
+@prefix rdf:  <http://www.w3.org/1999/02/22-rdf-syntax-ns#> .
+@prefix rdfs: <http://www.w3.org/2000/01/rdf-schema#> .
+
+##############################################################################
+# SHACL = 闭世界约束层。
+# OWL 只能告诉你"已知事实是否矛盾"；"字段没填"在 OWL 里永远不是错误（开放世界）。
+# 数据完整性、字段必填、正则、取值范围 → 一律放这里。
+##############################################################################
+
+ind:EquipmentShape a sh:NodeShape ;
+    sh:targetClass ind:Equipment ;
+    rdfs:label "设备：必须有唯一序列号与质量"@zh ;
+    sh:property [
+        sh:path ind:hasSerialNumber ;
+        sh:name "序列号" ;
+        sh:minCount 1 ;
+        sh:maxCount 1 ;
+        sh:datatype xsd:string ;
+        sh:pattern "^[A-Z][0-9]{2}-[0-9]{4}-[0-9]{3}$" ;
+        sh:message "设备缺少序列号，或格式不符 P01-2026-001。" ;
+    ] ;
+    sh:property [
+        sh:path ind:hasMass ;
+        sh:minCount 1 ;
+        sh:datatype xsd:decimal ;
+        sh:minInclusive 0.001 ;
+        sh:message "设备必须登记正的质量值(kg)。" ;
+    ] ;
+    sh:property [
+        sh:path ind:hasPart ;
+        sh:minCount 1 ;
+        sh:message "设备至少要有一个组成部件。" ;
+    ] .
+
+ind:PartShape a sh:NodeShape ;
+    sh:targetClass ind:Part ;
+    rdfs:label "零件：必须声明材质"@zh ;
+    sh:property [
+        sh:path ind:hasMaterial ;
+        sh:minCount 1 ;
+        sh:class ind:Material ;
+        sh:message "零件必须声明材质（开放世界下 OWL 不会报，这里才会）。" ;
+    ] .
+
+ind:CADModelShape a sh:NodeShape ;
+    sh:targetClass ind:CADModel ;
+    rdfs:label "模型：闭世界 + 必填版本"@zh ;
+    sh:closed true ;
+    # 注意：闭世界形状 + OWL 物化会打架。物化图里必然多出"反向属性"（specifies）
+    # 和 owl:sameAs（自反/函数属性规则产物），必须显式豁免，否则全是假阳性。
+    sh:ignoredProperties ( rdf:type rdfs:label owl:sameAs owl:differentFrom ind:specifies ) ;
+    sh:property [
+        sh:path ind:revision ;
+        sh:minCount 1 ;
+        sh:maxCount 1 ;
+        sh:datatype xsd:string ;
+        sh:message "CAD 模型必须且只能有一个版本号。" ;
+    ] .
+
+ind:SafetyPartDocumentedShape a sh:NodeShape ;
+    sh:targetClass ind:SafetyRelevantPart ;
+    rdfs:label "安全相关件必须建档"@zh ;
+    # 目标类 SafetyRelevantPart 本身是推理出来的：只有先在物化图上跑，
+    # 这条约束才会命中它该命中的实例（安全设备的全部下级零件）。
+    sh:property [
+        sh:path ind:specifiedIn ;
+        sh:minCount 1 ;
+        sh:class ind:CADModel ;
+        sh:message "装在安全设备上的零件必须有 CAD 模型可追溯。" ;
+    ] .
+
+ind:EquipmentNotPartShape a sh:NodeShape ;
+    sh:targetClass ind:Equipment ;
+    rdfs:label "设备不可能同时是零件（补 OWL-RL 不查互斥的短板）"@zh ;
+    sh:not [ sh:class ind:Part ] ;
+    sh:message "该设备同时被断言为零件，违反 Equipment ⊓ Part = ⊥。" .
+
+ind:SerialUniquenessShape a sh:NodeShape ;
+    rdfs:label "序列号全局唯一"@zh ;
+    sh:targetClass ind:Equipment ;
+    sh:sparql [
+        a sh:SPARQLConstraint ;
+        sh:message "序列号重复：{?this} 与其他设备使用了同一序列号 {?sn}。" ;
+        sh:prefixes <https://example.org/ind> ;
+        sh:select """
+            SELECT $this ?sn
+            WHERE {
+                $this <https://example.org/ind#hasSerialNumber> ?sn .
+                ?other <https://example.org/ind#hasSerialNumber> ?sn .
+                FILTER (?other != $this)
+            }
+        """ ;
+    ] .

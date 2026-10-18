@@ -1,0 +1,91 @@
+@prefix sh:   <http://www.w3.org/ns/shacl#> .
+@prefix ao:   <https://example.org/ao#> .
+@prefix act:  <https://example.org/ao/act/> .
+@prefix xsd:  <http://www.w3.org/2001/XMLSchema#> .
+@prefix rdfs: <http://www.w3.org/2000/01/rdf-schema#> .
+
+##############################################################################
+# 决策门禁：每条开/关井决策必须可解释、可执行、不越约束
+##############################################################################
+
+ao:DecisionShape a sh:NodeShape ;
+    sh:targetClass ao:WellDecision ;
+    rdfs:label "决策必须可追溯"@zh ;
+    sh:property [ sh:path ao:decidesWell ; sh:minCount 1 ; sh:maxCount 1 ;
+                  sh:message "决策未指向唯一油井。" ] ;
+    sh:property [ sh:path ao:hasAction ; sh:minCount 1 ;
+                  sh:message "决策缺少动作（开/关/维持/人工）。" ] ;
+    sh:property [ sh:path ao:ruleFired ; sh:minCount 1 ;
+                  sh:message "决策未说明命中了哪条规则，无法复核。" ] ;
+    sh:property [ sh:path ao:hasEvidence ; sh:minCount 2 ;
+                  sh:message "证据不足：至少需要 2 个指标实测值（如泵效+时率）才能支撑开关井。" ] ;
+    sh:property [ sh:path ao:confidence ; sh:minCount 1 ;
+                  sh:in ( "high" "medium" "low" ) ;
+                  sh:message "缺少置信度或取值非法。" ] ;
+    sh:property [ sh:path ao:decidedAt ; sh:minCount 1 ; sh:datatype xsd:dateTime ;
+                  sh:message "缺少决策时间。" ] .
+
+ao:CycleShape a sh:NodeShape ;
+    sh:targetClass ao:WellDecision ;
+    rdfs:label "涉及启停的决策必须给出可执行周期并满足最小关井"@zh ;
+    sh:sparql [
+        a sh:SPARQLConstraint ;
+        sh:message "开/关井决策缺少开停时长，或单次关井 <4h（crit:MinOffTime），启停过频会伤设备。" ;
+        sh:prefixes <https://example.org/ao> ;
+        sh:select """
+            SELECT $this ?act ?on ?off WHERE {
+                $this <https://example.org/ao#hasAction> ?act .
+                FILTER (?act IN (<https://example.org/ao/act/Start>, <https://example.org/ao/act/ShutIn>))
+                OPTIONAL { $this <https://example.org/ao#onHours> ?on }
+                OPTIONAL { $this <https://example.org/ao#offHours> ?off }
+                FILTER (!BOUND(?on) || (BOUND(?off) && ?off > 0 && ?off < 4.0))
+            }
+        """ ;
+    ] .
+
+ao:HeavyOilShape a sh:NodeShape ;
+    sh:targetClass ao:WellDecision ;
+    rdfs:label "稠油井单次关井不得超过 8h"@zh ;
+    sh:sparql [
+        a sh:SPARQLConstraint ;
+        sh:message "稠油井关井超过 8h，有凝管/蜡卡风险。" ;
+        sh:select """
+            SELECT $this ?off WHERE {
+                $this <https://example.org/ao#hasTrait> "稠油" .
+                $this <https://example.org/ao#offHours> ?off .
+                FILTER (?off > 8.0)
+            }
+        """ ;
+    ] .
+
+ao:ApprovalShape a sh:NodeShape ;
+    sh:targetClass ao:WellDecision ;
+    rdfs:label "提高时率/复产必须标记人工审批"@zh ;
+    sh:sparql [
+        a sh:SPARQLConstraint ;
+        sh:message "该决策是 act:Start（提高抽汲强度），必须标记 requiresApproval=true，不得自动执行。" ;
+        sh:prefixes <https://example.org/ao> ;
+        sh:select """
+            SELECT $this ?ok WHERE {
+                $this <https://example.org/ao#hasAction> <https://example.org/ao/act/Start> .
+                OPTIONAL { $this <https://example.org/ao#requiresApproval> ?ok }
+                FILTER (!BOUND(?ok) || ?ok = false)
+            }
+        """ ;
+    ] .
+
+ao:DowngradeShape a sh:NodeShape ;
+    sh:targetClass ao:WellDecision ;
+    rdfs:label "已降级的井不得保留自动执行动作"@zh ;
+    sh:sparql [
+        a sh:SPARQLConstraint ;
+        sh:message "该井已被回采偏差降级（downgraded=true），动作必须改为 Escalate，不得自动下发。" ;
+        sh:prefixes <https://example.org/ao> ;
+        sh:select """
+            SELECT $this ?a WHERE {
+                $this <https://example.org/ao#downgraded> true .
+                $this <https://example.org/ao#hasAction> ?a .
+                FILTER (?a != <https://example.org/ao/act/Escalate>)
+            }
+        """ ;
+    ] .

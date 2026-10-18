@@ -1,0 +1,87 @@
+@prefix ctl:  <https://example.org/ctl#> .
+@prefix ao:   <https://example.org/ao#> .
+@prefix act:  <https://example.org/ao/act/> .
+@prefix auth: <https://example.org/ctl/auth/> .
+@prefix st:   <https://example.org/ctl/status/> .
+@prefix owl:  <http://www.w3.org/2002/07/owl#> .
+@prefix rdf:  <http://www.w3.org/1999/02/22-rdf-syntax-ns#> .
+@prefix rdfs: <http://www.w3.org/2000/01/rdf-schema#> .
+@prefix xsd:  <http://www.w3.org/2001/XMLSchema#> .
+@prefix skos: <http://www.w3.org/2004/02/skos/core#> .
+
+##############################################################################
+# 自主控制接口契约（Integration Contract）
+#
+# 解决的问题：决策做得再好，落不了地都是零。落地要的是四件事——
+#   ① 命令化：决策 → 幂等命令（request_id、deadline、expected_state）；
+#   ② 授权分级：哪些能自动、哪些要人点一下、哪些只能建议（A/B/C）；
+#   ③ 灰度与回滚：先小范围、失败能退回原制度；
+#   ④ 审计：谁在何时基于什么下了什么，回执是什么。
+# 本文件只定义"契约"（类与新属性），具体实现见 scripts/control_api.py。
+##############################################################################
+
+<https://example.org/ctl> a owl:Ontology ;
+    rdfs:label "Autonomous Control Interface Contract"@en ;
+    rdfs:label "自主控制接口契约"@zh ;
+    owl:imports <https://example.org/ao/decision> ;
+    owl:versionIRI <https://example.org/ctl/1.0.0> .
+
+###########################  1. 执行器与端点  ################################
+
+ctl:Actuator a owl:Class ; rdfs:label "执行器（RTU/PLC/变频器）"@zh .
+ctl:endpoint a owl:DatatypeProperty ; rdfs:domain ctl:Actuator ; rdfs:range xsd:string ;
+    skos:note "生产环境填 OPC UA endpoint 或 MQTT topic；本仓库用内存模拟器。"@zh .
+ctl:protocol a owl:DatatypeProperty ; rdfs:domain ctl:Actuator ; rdfs:range xsd:string .
+
+###########################  2. 命令  ########################################
+
+ctl:Command a owl:Class ; rdfs:label "命令"@zh ;
+    skos:definition "一次可下发的动作请求。必须带 request_id（幂等键）、deadline、expected_state。"@zh .
+ctl:requestId a owl:DatatypeProperty ; rdfs:domain ctl:Command ; rdfs:range xsd:string .
+ctl:commandsWell a owl:ObjectProperty ; rdfs:domain ctl:Command ; rdfs:range ao:OilWell .
+ctl:commandAction a owl:ObjectProperty ; rdfs:domain ctl:Command ; rdfs:range ao:DecisionAction .
+ctl:deadlineSeconds a owl:DatatypeProperty ; rdfs:domain ctl:Command ; rdfs:range xsd:integer .
+ctl:expectedState a owl:DatatypeProperty ; rdfs:domain ctl:Command ; rdfs:range xsd:string ;
+    skos:note "执行后应达到的状态（如 duty=0.25），用于回执校验，防止'指令成功但设备没动'。"@zh .
+ctl:authLevel a owl:ObjectProperty ; rdfs:domain ctl:Command ; rdfs:range ctl:AuthorizationLevel .
+ctl:issuedBy a owl:DatatypeProperty ; rdfs:domain ctl:Command ; rdfs:range xsd:string .
+ctl:issuedAt a owl:DatatypeProperty ; rdfs:domain ctl:Command ; rdfs:range xsd:dateTime .
+
+###########################  3. 授权分级  ####################################
+
+ctl:AuthorizationLevel a owl:Class ; rdfs:label "授权级别"@zh .
+auth:A a ctl:AuthorizationLevel ; rdfs:label "A 类：系统自动执行（只向安全方向）"@zh ;
+    skos:note "缩短时率、关井、维持、升级人工。最坏结果是'停'，不是'炸'。"@zh .
+auth:B a ctl:AuthorizationLevel ; rdfs:label "B 类：系统建议 + 人工确认"@zh ;
+    skos:note "提高时率、恢复生产。会加剧抽汲与磨损，必须有人签字。"@zh .
+auth:C a ctl:AuthorizationLevel ; rdfs:label "C 类：仅给建议，人工决策"@zh ;
+    skos:note "关停、措施、注采比调整。属经营决策，系统只出方案与经济评价。"@zh .
+
+###########################  4. 回执与状态机  ################################
+
+ctl:Receipt a owl:Class ; rdfs:label "回执"@zh .
+ctl:CommandStatus a owl:Class ; rdfs:label "命令状态"@zh .
+st:Accepted a ctl:CommandStatus ; rdfs:label "已受理"@zh .
+st:Executing a ctl:CommandStatus ; rdfs:label "执行中"@zh .
+st:Done a ctl:CommandStatus ; rdfs:label "执行成功（已校验 expected_state）"@zh .
+st:Rejected a ctl:CommandStatus ; rdfs:label "被拒绝（参数/权限/设备）"@zh .
+st:Failed a ctl:CommandStatus ; rdfs:label "执行失败"@zh .
+st:RolledBack a ctl:CommandStatus ; rdfs:label "已回滚到原制度"@zh .
+st:AwaitingHuman a ctl:CommandStatus ; rdfs:label "等待人工确认"@zh .
+
+ctl:receiptOf a owl:ObjectProperty ; rdfs:domain ctl:Receipt ; rdfs:range ctl:Command .
+ctl:status a owl:ObjectProperty ; rdfs:domain ctl:Receipt ; rdfs:range ctl:CommandStatus .
+ctl:latencyMs a owl:DatatypeProperty ; rdfs:range xsd:integer .
+ctl:retries a owl:DatatypeProperty ; rdfs:range xsd:integer .
+ctl:errorMessage a owl:DatatypeProperty ; rdfs:range xsd:string .
+
+###########################  5. 灰度与审计  ##################################
+
+ctl:CanaryPolicy a owl:Class ; rdfs:label "灰度策略"@zh .
+ctl:canaryPercent a owl:DatatypeProperty ; rdfs:domain ctl:CanaryPolicy ; rdfs:range xsd:decimal ;
+    skos:note "按井号哈希稳定抽样，同一口井不会忽进忽出。"@zh .
+
+ctl:AuditEvent a owl:Class ; rdfs:label "审计事件"@zh ;
+    skos:note "命令、回执、审批、回滚、标定全部落审计；这是自主控制的追责基础。"@zh .
+ctl:eventType a owl:DatatypeProperty ; rdfs:range xsd:string .
+ctl:eventAt a owl:DatatypeProperty ; rdfs:range xsd:dateTime .

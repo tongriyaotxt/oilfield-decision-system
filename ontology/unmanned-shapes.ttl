@@ -1,0 +1,63 @@
+@prefix sh:   <http://www.w3.org/ns/shacl#> .
+@prefix um:   <https://example.org/um#> .
+@prefix lvl:  <https://example.org/um/lvl/> .
+@prefix xsd:  <http://www.w3.org/2001/XMLSchema#> .
+@prefix rdf:  <http://www.w3.org/1999/02/22-rdf-syntax-ns#> .
+@prefix rdfs: <http://www.w3.org/2000/01/rdf-schema#> .
+
+##############################################################################
+# 无人化准入校验（不是给人看的制度，是给流水线跑的门禁）
+#
+# 一条核心规则：**声明了某等级，就必须具备该等级的全部必需能力。**
+# 缺一项 = "假无人"：宣布无人值守，实际一断电/一入侵/一泄漏就得派人。
+##############################################################################
+
+um:StationShape a sh:NodeShape ;
+    sh:targetClass um:Station ;
+    rdfs:label "站点台账最小完整性"@zh ;
+    sh:property [
+        sh:path um:atLevel ; sh:minCount 1 ; sh:class um:AutonomyLevel ;
+        sh:message "站点未声明当前无人化等级。" ;
+    ] ;
+    sh:property [
+        sh:path um:targetLevel ; sh:minCount 1 ;
+        sh:message "站点未设定目标等级（没有目标就无法排期）。" ;
+    ] ;
+    sh:property [
+        sh:path um:staffOnSite ; sh:minCount 1 ; sh:minInclusive 0 ;
+        sh:message "站点未登记驻站人数（无人化的分母）。" ;
+    ] .
+
+um:LevelHonestyShape a sh:NodeShape ;
+    sh:targetClass um:Station ;
+    rdfs:label "声明等级必须与能力清单一致（防假无人）"@zh ;
+    sh:sparql [
+        a sh:SPARQLConstraint ;
+        sh:message "该站声明的无人化等级缺必需能力，属'假无人'：降级或补齐能力后再申报。" ;
+        sh:prefixes <https://example.org/um> ;
+        sh:select """
+            SELECT $this ?declared ?missing WHERE {
+                $this <https://example.org/um#atLevel> ?declared .
+                ?declared <https://example.org/um#requiresCapability> ?req .
+                FILTER NOT EXISTS { $this <https://example.org/um#hasCapability> ?req } .
+                BIND (?req AS ?missing)
+            }
+        """ ;
+    ] .
+
+um:UnmannedStationShape a sh:NodeShape ;
+    sh:targetClass um:Station ;
+    rdfs:label "宣称无人值守就不能靠驻人兜底"@zh ;
+    sh:sparql [
+        a sh:SPARQLConstraint ;
+        sh:message "该站已申报 L3 及以上（无人值守/自治），但仍有驻站人员：无人化没有闭环，别记成绩。" ;
+        sh:prefixes <https://example.org/um> ;
+        sh:select """
+            SELECT $this ?lvl ?staff WHERE {
+                $this <https://example.org/um#atLevel> ?lvl .
+                ?lvl <https://example.org/um#levelIndex> ?i .
+                $this <https://example.org/um#staffOnSite> ?staff .
+                FILTER (?i >= 3 && ?staff > 0.5)
+            }
+        """ ;
+    ] .

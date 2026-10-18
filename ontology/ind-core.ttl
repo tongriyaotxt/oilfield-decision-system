@@ -1,0 +1,278 @@
+@prefix ind:  <https://example.org/ind#> .
+@prefix owl:  <http://www.w3.org/2002/07/owl#> .
+@prefix rdf:  <http://www.w3.org/1999/02/22-rdf-syntax-ns#> .
+@prefix rdfs: <http://www.w3.org/2000/01/rdf-schema#> .
+@prefix xsd:  <http://www.w3.org/2001/XMLSchema#> .
+@prefix skos: <http://www.w3.org/2004/02/skos/core#> .
+
+##############################################################################
+# 工业产品结构本体（TBox）—— 一个刻意保持在 OWL 2 RL 内的可推理骨架
+# 设计目标：
+#   1) 单一继承骨架 + 少量定义类（defined class），让分类靠推理而不是靠贴标签；
+#   2) 只用 RL 支持的构造：intersection / someValuesFrom / inverse / transitive /
+#      propertyChain / disjointWith —— 不依赖 DL 推理器即可物化；
+#   3) 与 SHACL 分工：OWL 管"能推出什么"，SHACL 管"必须填什么"（闭世界）。
+##############################################################################
+
+<https://example.org/ind> a owl:Ontology ;
+    rdfs:label "Industrial Product Structure Ontology"@en , "工业产品结构本体"@zh ;
+    skos:note """示教用本体：物理对象 / 过程 / 信息实体三分，配零件分解与安全合规。"""@zh ;
+    owl:versionIRI <https://example.org/ind/1.0.0> .
+
+###########################  1. 上层三分（BFO 精简版）  ######################
+
+ind:Entity a owl:Class ; rdfs:label "Entity"@en .
+
+ind:Continuant a owl:Class ;
+    rdfs:subClassOf ind:Entity ;
+    rdfs:label "Continuant"@en , "持存体"@zh ;
+    skos:definition "在时间中保持同一性、整体存在（不被时间切片）的实体。"@zh .
+
+ind:Occurrent a owl:Class ;
+    rdfs:subClassOf ind:Entity ;
+    rdfs:label "Occurrent"@en , "发生体"@zh ;
+    skos:definition "在时间中展开、可被时间切片的实体：过程、事件。"@zh .
+
+ind:InformationEntity a owl:Class ;
+    rdfs:subClassOf ind:Entity ;
+    rdfs:label "InformationEntity"@en , "信息实体"@zh ;
+    skos:definition "以内容而非质量同一的实体：模型、规范、需求。"@zh .
+
+ind:Continuant owl:disjointWith ind:Occurrent .
+
+###########################  2. Continuant 分支  #############################
+
+ind:PhysicalObject a owl:Class ;
+    rdfs:subClassOf ind:Continuant ;
+    rdfs:label "PhysicalObject"@en , "物理对象"@zh .
+
+ind:Material a owl:Class ;
+    rdfs:subClassOf ind:Continuant ;
+    rdfs:label "Material"@en , "材料"@zh ;
+    skos:definition "以整块物质而非个体形式存在的持存体，如钢、铝。"@zh .
+
+# 材料与物理对象互斥。这条公理专门用来抓"属性域写太宽"的经典事故：
+# 若给 Material 也断言 ind:hasMass，而 hasMass 的 domain 是 PhysicalObject，
+# 推理器会把 Steel 推成 PhysicalObject，与本公理冲突 → 立刻暴露建模错误。
+ind:Material owl:disjointWith ind:PhysicalObject .
+
+ind:Equipment a owl:Class ;
+    rdfs:subClassOf ind:PhysicalObject ;
+    rdfs:label "Equipment"@en , "设备"@zh ;
+    skos:definition "具有独立序列号、可独立运行的整机。"@zh .
+
+ind:Part a owl:Class ;
+    rdfs:subClassOf ind:PhysicalObject ;
+    rdfs:label "Part"@en , "零件/部件"@zh ;
+    skos:definition "作为更大物理对象组成部分的物件。"@zh .
+
+# 装备与零件互斥：这是本体里最值钱的一条公理，用来抓"同一个体被错分类"。
+ind:Equipment owl:disjointWith ind:Part .
+
+###########################  3. Occurrent 分支  ##############################
+
+ind:Process a owl:Class ;
+    rdfs:subClassOf ind:Occurrent ;
+    rdfs:label "Process"@en , "过程"@zh .
+
+ind:ManufacturingProcess a owl:Class ;
+    rdfs:subClassOf ind:Process ;
+    rdfs:label "ManufacturingProcess"@en , "制造过程"@zh .
+
+ind:MaintenanceTask a owl:Class ;
+    rdfs:subClassOf ind:Process ;
+    rdfs:label "MaintenanceTask"@en , "维修作业"@zh .
+
+ind:Inspection a owl:Class ;
+    rdfs:subClassOf ind:Process ;
+    rdfs:label "Inspection"@en , "检验"@zh .
+
+###########################  4. InformationEntity 分支  ######################
+
+ind:CADModel a owl:Class ;
+    rdfs:subClassOf ind:InformationEntity ;
+    rdfs:label "CADModel"@en , "CAD 模型"@zh .
+
+ind:Requirement a owl:Class ;
+    rdfs:subClassOf ind:InformationEntity ;
+    rdfs:label "Requirement"@en , "要求/需求"@zh .
+
+ind:SafetyRequirement a owl:Class ;
+    rdfs:subClassOf ind:Requirement ;
+    rdfs:label "SafetyRequirement"@en , "安全要求"@zh .
+
+ind:CertificationRequirement a owl:Class ;
+    rdfs:subClassOf ind:Requirement ;
+    rdfs:label "CertificationRequirement"@en , "认证要求"@zh .
+
+###########################  5. 功能（Function）  ############################
+# 注意：功能不是 PhysicalObject，也不是 Occurrent，而是"可被实现的能力"。
+# 建模上把它放在 Continuant 之外（独立一根），避免"功能=过程"的常见事故。
+
+ind:Function a owl:Class ;
+    rdfs:subClassOf ind:Entity ;
+    rdfs:label "Function"@en , "功能"@zh .
+
+ind:Actuation a owl:Class;
+    rdfs:subClassOf ind:Function ;
+    rdfs:label "Actuation"@en , "驱动/作动"@zh .
+
+ind:Fastening a owl:Class ;
+    rdfs:subClassOf ind:Function ;
+    rdfs:label "Fastening"@en , "紧固"@zh .
+
+ind:StructuralSupport a owl:Class ;
+    rdfs:subClassOf ind:Function ;
+    rdfs:label "StructuralSupport"@en , "结构支撑"@zh .
+
+ind:SafetyMonitoring a owl:Class ;
+    rdfs:subClassOf ind:Function ;
+    rdfs:label "SafetyMonitoring"@en , "安全监测"@zh .
+
+###########################  6. 对象属性  ####################################
+
+ind:hasPart a owl:ObjectProperty , owl:TransitiveProperty ;
+    rdfs:label "hasPart"@en , "含有部件"@zh ;
+    rdfs:domain ind:PhysicalObject ;
+    rdfs:range  ind:PhysicalObject ;
+    owl:inverseOf ind:partOf .
+
+ind:partOf a owl:ObjectProperty , owl:TransitiveProperty ;
+    rdfs:label "partOf"@en , "属于部件"@zh ;
+    rdfs:domain ind:PhysicalObject ;
+    rdfs:range  ind:PhysicalObject ;
+    owl:inverseOf ind:hasPart .
+
+ind:installedIn a owl:ObjectProperty ;
+    rdfs:subPropertyOf ind:partOf ;
+    rdfs:label "installedIn"@en , "安装于"@zh .
+
+ind:locatedIn a owl:ObjectProperty ;
+    rdfs:label "locatedIn"@en , "位于"@zh ;
+    rdfs:domain ind:PhysicalObject ;
+    rdfs:range  ind:PhysicalObject ;
+    skos:note "位置沿分解树向下继承：若 x partOf y 且 y locatedIn z，则 x locatedIn z。"@zh ;
+    owl:propertyChainAxiom ( ind:partOf ind:locatedIn ) .
+
+ind:realizesFunction a owl:ObjectProperty ;
+    rdfs:label "realizesFunction"@en , "实现功能"@zh ;
+    rdfs:domain ind:Part ;
+    rdfs:range  ind:Function ;
+    owl:inverseOf ind:realizedBy .
+
+ind:realizedBy a owl:ObjectProperty ;
+    rdfs:label "realizedBy"@en ;
+    owl:inverseOf ind:realizesFunction .
+
+ind:governedBy a owl:ObjectProperty ;
+    rdfs:label "governedBy"@en , "受约束于"@zh ;
+    rdfs:domain ind:PhysicalObject ;
+    rdfs:range  ind:Requirement ;
+    owl:inverseOf ind:governs .
+
+ind:governs a owl:ObjectProperty ;
+    rdfs:label "governs"@en ;
+    owl:inverseOf ind:governedBy .
+
+ind:specifiedIn a owl:ObjectProperty ;
+    rdfs:label "specifiedIn"@en , "由…规定几何"@zh ;
+    rdfs:domain ind:PhysicalObject ;
+    rdfs:range  ind:CADModel ;
+    owl:inverseOf ind:specifies .
+
+ind:specifies a owl:ObjectProperty ;
+    rdfs:label "specifies"@en ;
+    owl:inverseOf ind:specifiedIn .
+
+ind:actsOn a owl:ObjectProperty ;
+    rdfs:label "actsOn"@en , "作用于"@zh ;
+    rdfs:domain ind:Process ;
+    rdfs:range  ind:PhysicalObject .
+
+ind:hasMaterial a owl:ObjectProperty ;
+    rdfs:label "hasMaterial"@en , "材质"@zh ;
+    rdfs:domain ind:PhysicalObject ;
+    rdfs:range  ind:Material .
+
+###########################  7. 数据属性  ####################################
+
+ind:hasSerialNumber a owl:DatatypeProperty , owl:FunctionalProperty ;
+    rdfs:label "hasSerialNumber"@en , "序列号"@zh ;
+    rdfs:domain ind:Equipment ;
+    rdfs:range  xsd:string .
+
+ind:hasMass a owl:DatatypeProperty ;
+    rdfs:label "hasMass"@en , "质量(kg)"@zh ;
+    rdfs:domain ind:PhysicalObject ;
+    rdfs:range  xsd:decimal .
+
+ind:density a owl:DatatypeProperty ;
+    rdfs:label "density"@en , "密度(kg/m3)"@zh ;
+    rdfs:domain ind:Material ;
+    rdfs:range  xsd:decimal .
+
+ind:revision a owl:DatatypeProperty ;
+    rdfs:label "revision"@en , "版本号"@zh ;
+    rdfs:domain ind:CADModel ;
+    rdfs:range  xsd:string .
+
+###########################  8. 定义类（推理的收益所在）  ####################
+# 关键写法：owl:equivalentClass + 充分条件，把"是不是某种东西"交给推理器判定，
+# 而不是让人在数据里手工贴 rdf:type。这是 taxonomy 与 ontology 的分水岭。
+
+ind:Assembly a owl:Class ;
+    rdfs:label "Assembly"@en , "装配体"@zh ;
+    owl:equivalentClass [
+        a owl:Class ;
+        owl:intersectionOf ( ind:Part
+            [ a owl:Restriction ; owl:onProperty ind:hasPart ; owl:someValuesFrom ind:Part ]
+        )
+    ] ;
+    skos:definition "自身是零件，且至少含有一个零件成员。"@zh .
+
+ind:System a owl:Class ;
+    rdfs:label "System"@en , "系统/机组"@zh ;
+    owl:equivalentClass [
+        a owl:Class ;
+        owl:intersectionOf ( ind:PhysicalObject
+            [ a owl:Restriction ; owl:onProperty ind:hasPart ; owl:someValuesFrom ind:Assembly ]
+        )
+    ] ;
+    skos:definition "至少含有一个装配体的物理对象。"@zh .
+
+ind:Actuator a owl:Class ;
+    rdfs:label "Actuator"@en , "作动件"@zh ;
+    owl:equivalentClass [
+        a owl:Class ;
+        owl:intersectionOf ( ind:Part
+            [ a owl:Restriction ; owl:onProperty ind:realizesFunction ; owl:someValuesFrom ind:Actuation ]
+        )
+    ] .
+
+ind:SafetyEquipment a owl:Class ;
+    rdfs:label "SafetyEquipment"@en , "安全设备"@zh ;
+    owl:equivalentClass [
+        a owl:Class ;
+        owl:intersectionOf ( ind:Equipment
+            [ a owl:Restriction ; owl:onProperty ind:governedBy ; owl:someValuesFrom ind:SafetyRequirement ]
+        )
+    ] .
+
+ind:SafetyRelevantPart a owl:Class ;
+    rdfs:label "SafetyRelevantPart"@en , "安全相关件"@zh ;
+    owl:equivalentClass [
+        a owl:Class ;
+        owl:intersectionOf ( ind:Part
+            [ a owl:Restriction ; owl:onProperty ind:partOf ; owl:someValuesFrom ind:SafetyEquipment ]
+        )
+    ] ;
+    skos:definition "直接或（经传递）间接装在任何安全设备上的零件。"@zh .
+
+ind:DocumentedPart a owl:Class ;
+    rdfs:label "DocumentedPart"@en , "已建档物件"@zh ;
+    owl:equivalentClass [
+        a owl:Class ;
+        owl:intersectionOf ( ind:PhysicalObject
+            [ a owl:Restriction ; owl:onProperty ind:specifiedIn ; owl:someValuesFrom ind:CADModel ]
+        )
+    ] .

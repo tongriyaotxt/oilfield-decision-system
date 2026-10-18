@@ -1,0 +1,264 @@
+@prefix ao:   <https://example.org/ao#> .
+@prefix m:    <https://example.org/ao/metric/> .
+@prefix d:    <https://example.org/ao/dim/> .
+@prefix ts:   <https://example.org/ao/time/> .
+@prefix src:  <https://example.org/ao/source/> .
+@prefix owl:  <http://www.w3.org/2002/07/owl#> .
+@prefix rdf:  <http://www.w3.org/1999/02/22-rdf-syntax-ns#> .
+@prefix rdfs: <http://www.w3.org/2000/01/rdf-schema#> .
+@prefix xsd:  <http://www.w3.org/2001/XMLSchema#> .
+@prefix skos: <http://www.w3.org/2004/02/skos/core#> .
+
+##############################################################################
+# 数据分析本体（语义层）
+#
+# 它不描述"井是什么"，只描述"指标怎么算、能不能加、跟谁比、口径从哪来"。
+# 目的只有一个：让 Agent 在生成查询之前，先被口径约束住。
+#
+# 三条最关键的设计（也是绝大多数 BI 报表口径打架的根因）：
+#   1) isAdditive：比率型指标（含水率、吨液电耗、时率）**不可跨实体相加**，
+#      必须"先汇总分子与分母、再相除"。本文件用 numerator/denominator 固化。
+#   2) hasTimeSemantics：油田有"生产日(8:00 切日)/自然日/月末盘库"三套时间口径，
+#      混用就会对不上账 —— 所以时间口径是指标的属性，不是查询的自由选项。
+#   3) hasAlias：同一个指标有 5 种叫法，别名必须收敛到唯一 IRI，
+#      否则 Agent 会把"产油量"和"日产油"当成两个指标。
+##############################################################################
+
+<https://example.org/ao> a owl:Ontology ;
+    rdfs:label "Oilfield Analytics Ontology"@en , "油藏生产分析语义层本体"@zh ;
+    owl:versionIRI <https://example.org/ao/1.0.0> ;
+    skos:note "分层：原子度量(可从表直接聚合) → 派生指标(由分子/分母构成) → 分析问题(模板)。"@zh .
+
+###########################  1. 基础类  ######################################
+
+ao:Metric a owl:Class ; rdfs:label "Metric"@en , "指标"@zh .
+ao:AtomicMetric a owl:Class ; rdfs:subClassOf ao:Metric ;
+    rdfs:label "原子度量"@zh ; skos:definition "可从明细表直接聚合的度量。"@zh .
+ao:DerivedMetric a owl:Class ; rdfs:subClassOf ao:Metric ;
+    rdfs:label "派生指标"@zh ; skos:definition "由其他指标（或分子/分母）计算得到。"@zh .
+
+ao:Dimension a owl:Class ; rdfs:label "Dimension"@en , "维度"@zh .
+ao:Grain a owl:Class ; rdfs:label "Grain"@en , "粒度"@zh .
+ao:Unit a owl:Class ; rdfs:label "Unit"@en , "单位"@zh .
+ao:TimeSemantics a owl:Class ; rdfs:label "TimeSemantics"@en , "时间口径"@zh .
+ao:DataSource a owl:Class ; rdfs:label "DataSource"@en , "数据源"@zh .
+ao:AnalysisQuestion a owl:Class ; rdfs:label "AnalysisQuestion"@en , "分析问题模板"@zh .
+
+###########################  2. 单位与粒度  ##################################
+
+ao:u-t   a ao:Unit ; rdfs:label "吨(t)"@zh .
+ao:u-m3  a ao:Unit ; rdfs:label "立方米(m³)"@zh .
+ao:u-pct a ao:Unit ; rdfs:label "百分比(%)"@zh .
+ao:u-kwh a ao:Unit ; rdfs:label "千瓦时(kWh)"@zh .
+ao:u-h   a ao:Unit ; rdfs:label "小时(h)"@zh .
+ao:u-count a ao:Unit ; rdfs:label "个/口"@zh .
+
+ao:g-well-day a ao:Grain ; rdfs:label "单井·日"@zh .
+ao:g-station-day a ao:Grain ; rdfs:label "单站·日"@zh .
+ao:g-month a ao:Grain ; rdfs:label "月"@zh .
+
+ao:hasUnit a owl:ObjectProperty ; rdfs:domain ao:Metric ; rdfs:range ao:Unit .
+ao:hasGrain a owl:ObjectProperty ; rdfs:domain ao:Metric ; rdfs:range ao:Grain .
+ao:hasAggregation a owl:DatatypeProperty ; rdfs:domain ao:Metric ; rdfs:range xsd:string ;
+    rdfs:label "默认聚合方式"@zh .
+ao:isAdditive a owl:DatatypeProperty ; rdfs:domain ao:Metric ; rdfs:range xsd:boolean ;
+    rdfs:label "是否可跨实体相加"@zh ;
+    skos:definition "false 表示比率型：跨井/跨站汇总时必须先汇总分子分母再相除，直接 SUM 会错。"@zh .
+ao:numerator a owl:ObjectProperty ; rdfs:domain ao:Metric ; rdfs:range ao:Metric .
+ao:denominator a owl:ObjectProperty ; rdfs:domain ao:Metric ; rdfs:range ao:Metric .
+ao:hasAlias a owl:DatatypeProperty ; rdfs:range xsd:string .
+ao:hasFormula a owl:DatatypeProperty ; rdfs:domain ao:Metric ; rdfs:range xsd:string .
+ao:sourceField a owl:DatatypeProperty ; rdfs:domain ao:AtomicMetric ; rdfs:range xsd:string ;
+    rdfs:label "来源字段（lineage 起点）"@zh .
+ao:hasTimeSemantics a owl:ObjectProperty ; rdfs:domain ao:Metric ; rdfs:range ao:TimeSemantics .
+ao:computedFromTable a owl:ObjectProperty ; rdfs:domain ao:Metric ; rdfs:range ao:DataSource .
+
+###########################  3. 时间口径（油田特有）  ########################
+
+ts:production-day a ao:TimeSemantics ; rdfs:label "生产日（当日 08:00 至次日 08:00）"@zh ;
+    skos:note "生产日报口径。跨自然日的班次归到生产日，不能与自然日混算。"@zh .
+ts:calendar-day a ao:TimeSemantics ; rdfs:label "自然日（00:00–24:00）"@zh ;
+    skos:note "能耗、电费、设备运行时长通常用自然日。"@zh .
+ts:month-inventory a ao:TimeSemantics ; rdfs:label "月末盘库"@zh ;
+    skos:note "月度结算口径，与日报累加存在计量差（罐存变化），差额需单列。"@zh .
+
+###########################  4. 数据源  ######################################
+
+src:well_daily a ao:DataSource ; rdfs:label "单井日数据表 well_daily"@zh ;
+    skos:note "字段：day, well, block, plant, lift, status, oil_t, liquid_m3, water_m3, runtime_h, kwh, co2_inj_t"@zh .
+src:well_meta a ao:DataSource ; rdfs:label "井基础台账 well_meta"@zh ;
+    skos:note "字段：well, q_theory（理论排量 m³/d）, pump_depth, commission_date"@zh .
+
+###########################  5. 原子度量  ####################################
+
+m:oil_t a ao:AtomicMetric ;
+    rdfs:label "产油量"@zh ; ao:hasAlias "产油" , "油量" , "原油产量" , "产油量(t)" ;
+    ao:hasUnit ao:u-t ; ao:hasGrain ao:g-well-day ; ao:hasAggregation "sum" ;
+    ao:isAdditive true ; ao:sourceField "oil_t" ; ao:hasTimeSemantics ts:production-day ;
+    ao:computedFromTable src:well_daily ;
+    skos:definition "单井当日产出原油质量，生产日口径。"@zh .
+
+m:liquid_m3 a ao:AtomicMetric ;
+    rdfs:label "产液量"@zh ; ao:hasAlias "产液" , "液量" , "产液量(m3)" ;
+    ao:hasUnit ao:u-m3 ; ao:hasGrain ao:g-well-day ; ao:hasAggregation "sum" ;
+    ao:isAdditive true ; ao:sourceField "liquid_m3" ; ao:hasTimeSemantics ts:production-day ;
+    ao:computedFromTable src:well_daily .
+
+m:water_m3 a ao:AtomicMetric ;
+    rdfs:label "产水量"@zh ; ao:hasAlias "产水" , "水量" ;
+    ao:hasUnit ao:u-m3 ; ao:hasGrain ao:g-well-day ; ao:hasAggregation "sum" ;
+    ao:isAdditive true ; ao:sourceField "water_m3" ; ao:hasTimeSemantics ts:production-day ;
+    ao:computedFromTable src:well_daily .
+
+m:runtime_h a ao:AtomicMetric ;
+    rdfs:label "运行时长"@zh ; ao:hasAlias "运行时间" , "开机时长" ;
+    ao:hasUnit ao:u-h ; ao:hasGrain ao:g-well-day ; ao:hasAggregation "sum" ;
+    ao:isAdditive true ; ao:sourceField "runtime_h" ; ao:hasTimeSemantics ts:calendar-day ;
+    ao:computedFromTable src:well_daily .
+
+m:calendar_h a ao:AtomicMetric ;
+    rdfs:label "日历小时数"@zh ; ao:hasAlias "总时长" ;
+    ao:hasUnit ao:u-h ; ao:hasGrain ao:g-well-day ; ao:hasAggregation "sum" ;
+    ao:isAdditive true ; ao:sourceField "24" ; ao:hasTimeSemantics ts:calendar-day ;
+    ao:computedFromTable src:well_daily ;
+    skos:definition "每个井日固定 24h，作为时率与泵效的分母。"@zh .
+
+m:kwh a ao:AtomicMetric ;
+    rdfs:label "耗电量"@zh ; ao:hasAlias "用电量" , "电耗" ;
+    ao:hasUnit ao:u-kwh ; ao:hasGrain ao:g-well-day ; ao:hasAggregation "sum" ;
+    ao:isAdditive true ; ao:sourceField "kwh" ; ao:hasTimeSemantics ts:calendar-day ;
+    ao:computedFromTable src:well_daily .
+
+m:co2_inj_t a ao:AtomicMetric ;
+    rdfs:label "注二氧化碳量"@zh ; ao:hasAlias "注碳量" , "CO2注入量" ;
+    ao:hasUnit ao:u-t ; ao:hasGrain ao:g-well-day ; ao:hasAggregation "sum" ;
+    ao:isAdditive true ; ao:sourceField "co2_inj_t" ; ao:hasTimeSemantics ts:production-day ;
+    ao:computedFromTable src:well_daily .
+
+m:well_count a ao:AtomicMetric ;
+    rdfs:label "开井数"@zh ; ao:hasAlias "开井数" , "生产井数" , "井数" ;
+    ao:hasUnit ao:u-count ; ao:hasGrain ao:g-well-day ; ao:hasAggregation "count-distinct" ;
+    ao:isAdditive false ; ao:sourceField "well" ; ao:hasTimeSemantics ts:production-day ;
+    ao:computedFromTable src:well_daily ;
+    skos:definition "按井去重计数。跨日累加会重复计井，必须用 count distinct。"@zh .
+
+###########################  6. 派生指标（口径固化在这里）  ##################
+
+m:water_cut a ao:DerivedMetric ;
+    rdfs:label "含水率"@zh ; ao:hasAlias "含水" , "综合含水" , "含水率(%)" ;
+    ao:hasUnit ao:u-pct ; ao:hasGrain ao:g-well-day ; ao:hasAggregation "ratio" ;
+    ao:isAdditive false ; ao:numerator m:water_m3 ; ao:denominator m:liquid_m3 ;
+    ao:hasFormula "SUM(water_m3) / SUM(liquid_m3)" ;
+    ao:hasTimeSemantics ts:production-day ; ao:computedFromTable src:well_daily ;
+    skos:definition "跨井汇总时先把产水量与产液量各自汇总，再相除；对含水率直接取平均是错的。"@zh .
+
+m:unit_power a ao:DerivedMetric ;
+    rdfs:label "吨液电耗"@zh ; ao:hasAlias "吨液单耗" , "吨液耗电" ;
+    ao:hasUnit ao:u-kwh ; ao:hasGrain ao:g-well-day ; ao:hasAggregation "ratio" ;
+    ao:isAdditive false ; ao:numerator m:kwh ; ao:denominator m:liquid_m3 ;
+    ao:hasFormula "SUM(kwh) / SUM(liquid_m3)" ;
+    ao:hasTimeSemantics ts:calendar-day ; ao:computedFromTable src:well_daily ;
+    skos:definition "kWh/m³。注意分母为 0（躺井）时必须单列，不能当 0 处理。"@zh .
+
+m:unit_power_oil a ao:DerivedMetric ;
+    rdfs:label "吨油电耗"@zh ; ao:hasAlias "吨油单耗" ;
+    ao:hasUnit ao:u-kwh ; ao:hasGrain ao:g-well-day ; ao:hasAggregation "ratio" ;
+    ao:isAdditive false ; ao:numerator m:kwh ; ao:denominator m:oil_t ;
+    ao:hasFormula "SUM(kwh) / SUM(oil_t)" ;
+    ao:hasTimeSemantics ts:calendar-day ; ao:computedFromTable src:well_daily .
+
+m:duty_ratio a ao:DerivedMetric ;
+    rdfs:label "开井时率"@zh ; ao:hasAlias "时率" , "运转率" , "开机率" ;
+    ao:hasUnit ao:u-pct ; ao:hasGrain ao:g-well-day ; ao:hasAggregation "ratio" ;
+    ao:isAdditive false ; ao:numerator m:runtime_h ; ao:denominator m:calendar_h ;
+    ao:hasFormula "SUM(runtime_h) / SUM(24)" ;
+    ao:hasTimeSemantics ts:calendar-day ; ao:computedFromTable src:well_daily .
+
+m:co2_eor a ao:DerivedMetric ;
+    rdfs:label "吨碳换油"@zh ; ao:hasAlias "CO2换油率" , "换油率" ;
+    ao:hasUnit ao:u-t ; ao:hasGrain ao:g-well-day ; ao:hasAggregation "ratio" ;
+    ao:isAdditive false ; ao:numerator m:oil_t ; ao:denominator m:co2_inj_t ;
+    ao:hasFormula "SUM(oil_t) / SUM(co2_inj_t)" ;
+    ao:hasTimeSemantics ts:production-day ; ao:computedFromTable src:well_daily ;
+    skos:definition "吨油/吨CO2，仅在注碳井上成立，非注碳井分母为 0。"@zh .
+
+###########################  7. 维度  ########################################
+
+d:day   a ao:Dimension ; rdfs:label "日期(生产日)"@zh ; ao:dimField "day" ; ao:dimType "time" .
+d:month a ao:Dimension ; rdfs:label "月份"@zh ; ao:dimField "substr(day,1,7)" ; ao:dimType "time" .
+d:block a ao:Dimension ; rdfs:label "区块"@zh ; ao:dimField "block" ; ao:dimType "categorical" .
+d:plant a ao:Dimension ; rdfs:label "采油厂"@zh ; ao:dimField "plant" ; ao:dimType "categorical" .
+d:lift  a ao:Dimension ; rdfs:label "举升方式"@zh ; ao:dimField "lift" ; ao:dimType "categorical" .
+d:status a ao:Dimension ; rdfs:label "井状态"@zh ; ao:dimField "status" ; ao:dimType "categorical" .
+d:well  a ao:Dimension ; rdfs:label "井号"@zh ; ao:dimField "well" ; ao:dimType "entity" .
+
+ao:dimField a owl:DatatypeProperty ; rdfs:domain ao:Dimension ; rdfs:range xsd:string .
+ao:dimType a owl:DatatypeProperty ; rdfs:domain ao:Dimension ; rdfs:range xsd:string .
+ao:sliceBy a owl:ObjectProperty ; rdfs:domain ao:Metric ; rdfs:range ao:Dimension .
+
+###########################  8. 分析问题模板（Agent 的 few-shot 源）  ########
+
+m:oil_rate a ao:DerivedMetric ;
+    rdfs:label "日产油水平"@zh ; ao:hasAlias "日产油" , "日产量" , "日产" ;
+    ao:hasUnit ao:u-t ; ao:hasGrain ao:g-well-day ; ao:hasAggregation "sum/天数" ;
+    ao:isAdditive false ; ao:numerator m:oil_t ; ao:denominator m:calendar_h ;
+    ao:hasFormula "SUM(oil_t) / (SUM(24)/24)" ;
+    ao:hasTimeSemantics ts:production-day ; ao:computedFromTable src:well_daily ;
+    skos:definition "区间产油量除以天数（井日数/井数的日均）。问'日产油'时必须先问清是水平还是区间总量。"@zh .
+
+ao:q-WaterCut a ao:AnalysisQuestion ;
+    rdfs:label "某区块/采油厂在某时间窗的含水率是多少？"@zh ;
+    ao:usesMetric m:water_cut ; ao:usesDimension d:block , d:month ;
+    skos:note "必须走 ratio：SUM(water)/SUM(liquid)。"@zh .
+
+ao:q-RankUnitPower a ao:AnalysisQuestion ;
+    rdfs:label "哪个采油厂/区块的吨液电耗最高？"@zh ;
+    ao:usesMetric m:unit_power ; ao:usesDimension d:plant , d:block ;
+    skos:note "排序前先排除分母为 0 的实体。"@zh .
+
+ao:q-StatusCompare a ao:AnalysisQuestion ;
+    rdfs:label "间开井与连续井的时率/单耗差多少？"@zh ;
+    ao:usesMetric m:duty_ratio , m:unit_power ; ao:usesDimension d:status .
+
+ao:q-TrendTop a ao:AnalysisQuestion ;
+    rdfs:label "含水率上升最快的几口井？"@zh ;
+    ao:usesMetric m:water_cut ; ao:usesDimension d:well , d:day ;
+    skos:note "趋势类问题必须按井先算日序列，再比较首末或斜率，不能直接对含水率做差分聚合。"@zh .
+
+ao:usesMetric a owl:ObjectProperty ; rdfs:domain ao:AnalysisQuestion ; rdfs:range ao:Metric .
+ao:usesDimension a owl:ObjectProperty ; rdfs:domain ao:AnalysisQuestion ; rdfs:range ao:Dimension .
+
+###########################  9. 决策用派生指标（补泵效口径）  #################
+
+m:theo_liquid a ao:AtomicMetric ;
+    rdfs:label "理论排量液量"@zh ; ao:hasAlias "理论排量" ;
+    ao:hasUnit ao:u-m3 ; ao:hasGrain ao:g-well-day ; ao:hasAggregation "sum" ;
+    ao:isAdditive true ; ao:sourceField "q_theory*runtime_h/24.0" ;
+    ao:hasTimeSemantics ts:calendar-day ; ao:computedFromTable src:well_daily ;
+    skos:definition "泵在该井运行时长内的理论举升量 = 理论排量 q_theory × 运行时率。泵效的分母。"@zh .
+
+m:pump_eff a ao:DerivedMetric ;
+    rdfs:label "泵效"@zh ; ao:hasAlias "充满度" , "充满系数" , "泵效(%)" ;
+    ao:hasUnit ao:u-pct ; ao:hasGrain ao:g-well-day ; ao:hasAggregation "ratio" ;
+    ao:isAdditive false ; ao:numerator m:liquid_m3 ; ao:denominator m:theo_liquid ;
+    ao:hasFormula "SUM(liquid_m3) / SUM(q_theory*runtime_h/24)" ;
+    ao:hasTimeSemantics ts:calendar-day ; ao:computedFromTable src:well_daily ;
+    skos:definition "实际产液 / 理论举升量。泵效低=抽汲能力过剩（供液不足），是间开与降冲次的判据。"@zh .
+
+# ── 决策用不变量：供液比（不随运行制度变化）────────────────────────────
+# 泵效 = 供液比 / 时率，随时率变化；若拿泵效当判据，缩短时率会让泵效升高，
+# 于是被误判成"供液充足"再去提高时率 → 自激振荡。必须改用不随 duty 变化的量。
+m:theo_capacity a ao:AtomicMetric ;
+    rdfs:label "泵日能力"@zh ; ao:hasAlias "理论举升能力" ;
+    ao:hasUnit ao:u-m3 ; ao:hasGrain ao:g-well-day ; ao:hasAggregation "sum" ;
+    ao:isAdditive true ; ao:sourceField "q_theory" ;
+    ao:hasTimeSemantics ts:calendar-day ; ao:computedFromTable src:well_daily ;
+    skos:definition "井的理论日举升能力（m³/d）。跨天累加即为'能力×天数'，作为供液比的分母。"@zh .
+
+m:supply_ratio a ao:DerivedMetric ;
+    rdfs:label "供液比"@zh ; ao:hasAlias "供液能力比" , "qi比qp" ;
+    ao:hasUnit ao:u-pct ; ao:hasGrain ao:g-well-day ; ao:hasAggregation "ratio" ;
+    ao:isAdditive false ; ao:numerator m:liquid_m3 ; ao:denominator m:theo_capacity ;
+    ao:hasFormula "SUM(liquid_m3) / SUM(q_theory)" ;
+    ao:hasTimeSemantics ts:production-day ; ao:computedFromTable src:well_daily ;
+    skos:definition "供液能力 qi 与泵能力 qp 的比值。**与时率无关**，是间开决策唯一稳定的判据；泵效=供液比/时率。"@zh .

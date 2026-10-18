@@ -1,0 +1,87 @@
+@prefix flt:  <https://example.org/fault#> .
+@prefix ao:   <https://example.org/ao#> .
+@prefix ft:   <https://example.org/fault/type/> .
+@prefix sk:   <https://example.org/fault/skill/> .
+@prefix wo:   <https://example.org/fault/wo/> .
+@prefix owl:  <http://www.w3.org/2002/07/owl#> .
+@prefix rdf:  <http://www.w3.org/1999/02/22-rdf-syntax-ns#> .
+@prefix rdfs: <http://www.w3.org/2000/01/rdf-schema#> .
+@prefix xsd:  <http://www.w3.org/2001/XMLSchema#> .
+@prefix skos: <http://www.w3.org/2004/02/skos/core#> .
+
+##############################################################################
+# 故障预判 · 工单 · 派工 契约
+#
+# 三条立场：
+#   ① 预判只输出"风险 + 类型 + 证据 + 预计失效时间"，不输出"必须换泵"——
+#      判断归人，但证据必须机器可复算；
+#   ② 工单是"可执行的最小单元"：技能、SLA、备件、验收标准都在里面；
+#   ③ AI 只写**话术与排序建议**，数字全部来自确定性计算结果，写成文本后还要过
+#      数字核对（出现事实表里没有的数字即拒收）。
+##############################################################################
+
+<https://example.org/fault> a owl:Ontology ;
+    rdfs:label "Fault Prediction & Dispatch Contract"@en ;
+    rdfs:label "故障预判与派工契约"@zh ;
+    owl:imports <https://example.org/ao> .
+
+###########################  1. 故障类型  ####################################
+
+flt:FaultType a owl:Class ; rdfs:label "故障类型"@zh .
+flt:requiresSkill a owl:ObjectProperty ; rdfs:domain flt:FaultType ; rdfs:range flt:Skill .
+flt:defaultSlaMinutes a owl:DatatypeProperty ; rdfs:domain flt:FaultType ; rdfs:range xsd:integer .
+flt:severity a owl:DatatypeProperty ; rdfs:domain flt:FaultType ; rdfs:range xsd:string .
+
+ft:pump-wear a flt:FaultType ; rdfs:label "泵磨损/凡尔漏（泵效持续下降）"@zh ;
+    flt:requiresSkill sk:检泵 ; flt:defaultSlaMinutes 1440 ; flt:severity "high" .
+ft:sucker-rod a flt:FaultType ; rdfs:label "断脱/卡泵（产液阶跃归零）"@zh ;
+    flt:requiresSkill sk:作业 ; flt:defaultSlaMinutes 480 ; flt:severity "critical" .
+ft:gas-lock a flt:FaultType ; rdfs:label "气锁/气影响（功图充满度突降）"@zh ;
+    flt:requiresSkill sk:采油 ; flt:defaultSlaMinutes 240 ; flt:severity "high" .
+ft:water-break a flt:FaultType ; rdfs:label "含水突升/窜槽"@zh ;
+    flt:requiresSkill sk:地质 ; flt:defaultSlaMinutes 2880 ; flt:severity "medium" .
+ft:sensor-fail a flt:FaultType ; rdfs:label "传感器/通信失效（数据缺口或死值）"@zh ;
+    flt:requiresSkill sk:仪表 ; flt:defaultSlaMinutes 1440 ; flt:severity "medium" .
+ft:valve-stuck a flt:FaultType ; rdfs:label "阀门/执行机构卡涩（指令不生效）"@zh ;
+    flt:requiresSkill sk:仪表 ; flt:defaultSlaMinutes 720 ; flt:severity "high" .
+ft:over-pumping a flt:FaultType ; rdfs:label "抽汲过剩（非故障，制度问题）"@zh ;
+    flt:requiresSkill sk:采油 ; flt:defaultSlaMinutes 4320 ; flt:severity "low" .
+
+###########################  2. 技能与班组  ##################################
+
+flt:Skill a owl:Class ; rdfs:label "技能"@zh .
+sk:采油 a flt:Skill ; rdfs:label "采油工（调参/间开/录取）"@zh .
+sk:检泵 a flt:Skill ; rdfs:label "检泵作业"@zh .
+sk:作业 a flt:Skill ; rdfs:label "井下作业（大修）"@zh .
+sk:仪表 a flt:Skill ; rdfs:label "仪表自动化"@zh .
+sk:电气 a flt:Skill ; rdfs:label "电气"@zh .
+sk:地质 a flt:Skill ; rdfs:label "地质/开发"@zh .
+
+flt:Worker a owl:Class ; rdfs:label "班组成员"@zh .
+flt:hasSkill a owl:ObjectProperty ; rdfs:domain flt:Worker ; rdfs:range flt:Skill .
+flt:baseLocation a owl:DatatypeProperty ; rdfs:domain flt:Worker ; rdfs:range xsd:string .
+flt:currentLoad a owl:DatatypeProperty ; rdfs:domain flt:Worker ; rdfs:range xsd:integer .
+
+###########################  3. 工单  ########################################
+
+flt:WorkOrder a owl:Class ; rdfs:label "工单"@zh .
+flt:orderOf a owl:ObjectProperty ; rdfs:domain flt:WorkOrder ; rdfs:range ao:OilWell .
+flt:orderType a owl:ObjectProperty ; rdfs:domain flt:WorkOrder ; rdfs:range flt:FaultType .
+flt:assignedTo a owl:ObjectProperty ; rdfs:domain flt:WorkOrder ; rdfs:range flt:Worker .
+flt:priority a owl:DatatypeProperty ; rdfs:domain flt:WorkOrder ; rdfs:range xsd:string .
+flt:slaMinutes a owl:DatatypeProperty ; rdfs:domain flt:WorkOrder ; rdfs:range xsd:integer .
+flt:evidence a owl:DatatypeProperty ; rdfs:domain flt:WorkOrder ; rdfs:range xsd:string ;
+    skos:note "必须可复算：指标名 + 当前值 + 趋势斜率 + 阈值。"@zh .
+flt:status a owl:DatatypeProperty ; rdfs:domain flt:WorkOrder ; rdfs:range xsd:string ;
+    skos:note "created / assigned / accepted / onsite / done / verified / escalated / rejected"@zh .
+flt:escalationLevel a owl:DatatypeProperty ; rdfs:domain flt:WorkOrder ; rdfs:range xsd:integer .
+
+###########################  4. 风险结论  ####################################
+
+flt:FaultRisk a owl:Class ; rdfs:label "健康风险"@zh .
+flt:riskOf a owl:ObjectProperty ; rdfs:domain flt:FaultRisk ; rdfs:range ao:OilWell .
+flt:riskType a owl:ObjectProperty ; rdfs:domain flt:FaultRisk ; rdfs:range flt:FaultType .
+flt:riskScore a owl:DatatypeProperty ; rdfs:domain flt:FaultRisk ; rdfs:range xsd:decimal ;
+    skos:note "0~1，越高越危险。由趋势斜率、当前水平、数据质量合成。"@zh .
+flt:daysToThreshold a owl:DatatypeProperty ; rdfs:domain flt:FaultRisk ; rdfs:range xsd:decimal ;
+    skos:note "按当前劣化速率，预计多少天后越过处置阈值（无法估计则为空）。"@zh .

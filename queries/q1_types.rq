@@ -1,0 +1,13 @@
+# Q1：只列出了"定义类"的推理结果 —— 这些 rdf:type 在数据文件里一条都没写过
+PREFIX ind:  <https://example.org/ind#>
+PREFIX rdf:  <http://www.w3.org/1999/02/22-rdf-syntax-ns#>
+PREFIX rdfs: <http://www.w3.org/2000/01/rdf-schema#>
+
+SELECT ?个体 ?推理出的类型 ?标签
+WHERE {
+  VALUES ?推理出的类型 { ind:Assembly ind:System ind:Actuator
+                         ind:SafetyEquipment ind:SafetyRelevantPart ind:DocumentedPart }
+  ?个体 rdf:type ?推理出的类型 .
+  OPTIONAL { ?个体 rdfs:label ?标签 }
+}
+ORDER BY ?推理出的类型 ?个体

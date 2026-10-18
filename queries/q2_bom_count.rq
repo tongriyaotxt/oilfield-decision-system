@@ -1,0 +1,14 @@
+# Q2：按设备统计 BOM 规模（hasPart 传递闭包，靠推理得到的 hasPart 边）
+PREFIX ind:  <https://example.org/ind#>
+PREFIX rdfs: <http://www.w3.org/2000/01/rdf-schema#>
+PREFIX xsd:  <http://www.w3.org/2001/XMLSchema#>
+
+SELECT ?设备 ?设备标签 (COUNT(DISTINCT ?零件) AS ?零件数)
+WHERE {
+  ?设备 rdf:type ind:Equipment ;
+        ind:hasPart+ ?零件 .
+  ?零件 rdf:type ind:Part .
+  OPTIONAL { ?设备 rdfs:label ?设备标签 }
+}
+GROUP BY ?设备 ?设备标签
+ORDER BY DESC(?零件数)

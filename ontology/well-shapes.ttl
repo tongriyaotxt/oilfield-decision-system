@@ -1,0 +1,142 @@
+@prefix sh:   <http://www.w3.org/ns/shacl#> .
+@prefix well: <https://example.org/well#> .
+@prefix w:    <https://example.org/well/w/> .
+@prefix tr:   <https://example.org/well/trait/> .
+@prefix crit: <https://example.org/well/crit/> .
+@prefix owl:  <http://www.w3.org/2002/07/owl#> .
+@prefix rdf:  <http://www.w3.org/1999/02/22-rdf-syntax-ns#> .
+@prefix rdfs: <http://www.w3.org/2000/01/rdf-schema#> .
+@prefix xsd:  <http://www.w3.org/2001/XMLSchema#> .
+
+##############################################################################
+# 决策合规门禁（SHACL）
+#
+# 无人化场景里，"算法判错了"通常不是最贵的成本；**"判错了却查不出凭什么"**才是。
+# 所以这里检查的不是井况，而是"决策本身是否合格"：
+#   有没有依据判据、有没有挂证据、周期是否满足启停约束、故障井有没有被自动开井。
+##############################################################################
+
+well:DecisionShape a sh:NodeShape ;
+    sh:targetClass well:Decision ;
+    rdfs:label "任何开关井决策都必须可追溯"@zh ;
+    sh:property [
+        sh:path well:justifiedBy ; sh:minCount 1 ;
+        sh:message "决策未挂依据判据（justifiedBy），不可下发。" ;
+    ] ;
+    sh:property [
+        sh:path well:basedOn ; sh:minCount 1 ;
+        sh:message "决策未挂观测证据（basedOn），无法复算，不可下发。" ;
+    ] ;
+    sh:property [
+        sh:path well:decidesFor ; sh:minCount 1 ; sh:maxCount 1 ;
+        sh:class well:OilWell ;
+        sh:message "决策必须且只能指向一口油井。" ;
+    ] ;
+    sh:property [
+        sh:path well:createdAt ; sh:minCount 1 ; sh:datatype xsd:dateTime ;
+        sh:message "决策缺少生成时间。" ;
+    ] ;
+    sh:property [
+        sh:path well:confidence ; sh:minCount 1 ;
+        sh:in ( "high" "medium" "low" ) ;
+        sh:message "置信度缺失或取值非法。" ;
+    ] .
+
+well:IntermittentDecisionShape a sh:NodeShape ;
+    sh:targetClass well:StartDecision ;
+    rdfs:label "开井决策的周期必须满足启停约束"@zh ;
+    sh:property [
+        sh:path well:hasCycleOffHours ; sh:minCount 1 ; sh:minInclusive 4.0 ;
+        sh:message "关井时长低于 4h（crit:MinOffTime），启停过频会伤电机与抽油机。" ;
+    ] ;
+    sh:property [
+        sh:path well:hasCycleOnHours ; sh:minCount 1 ; sh:minInclusive 0.4 ;
+        sh:message "单次开井时长过短，无实际意义。" ;
+    ] ;
+    sh:property [
+        sh:path well:hasDutyRatio ; sh:minCount 1 ;
+        sh:minExclusive 0.0 ; sh:maxInclusive 1.0 ;
+        sh:message "占空比必须在 (0,1]。" ;
+    ] .
+
+well:FaultLockoutShape a sh:NodeShape ;
+    sh:targetClass well:StartDecision ;
+    rdfs:label "故障锁定井禁止自动开井"@zh ;
+    sh:sparql [
+        a sh:SPARQLConstraint ;
+        sh:message "该井带 FaultLock 性状（过载/缺相等），任何自动开井决策都违规，只能升级人工。" ;
+        sh:prefixes <https://example.org/well> ;
+        sh:select """
+            SELECT $this ?w WHERE {
+                $this <https://example.org/well#decidesFor> ?w .
+                ?w <https://example.org/well#hasTrait> <https://example.org/well/trait/FaultLock> .
+            }
+        """ ;
+    ] .
+
+well:HeavyOilOffLimitShape a sh:NodeShape ;
+    sh:targetClass well:StartDecision ;
+    rdfs:label "稠油井关井时长不得超过 8h"@zh ;
+    sh:sparql [
+        a sh:SPARQLConstraint ;
+        sh:message "稠油井单次关井超过 8h（crit:HeavyOilOffLimit），有凝管/蜡卡风险。" ;
+        sh:prefixes <https://example.org/well> ;
+        sh:select """
+            SELECT $this ?w ?off WHERE {
+                $this <https://example.org/well#decidesFor> ?w .
+                ?w <https://example.org/well#hasTrait> <https://example.org/well/trait/HeavyOil> .
+                $this <https://example.org/well#hasCycleOffHours> ?off .
+                FILTER (?off > 8.0)
+            }
+        """ ;
+    ] .
+
+well:WinterOffLimitShape a sh:NodeShape ;
+    sh:targetClass well:StartDecision ;
+    rdfs:label "寒区冬季单次关井不得超过 6h"@zh ;
+    sh:sparql [
+        a sh:SPARQLConstraint ;
+        sh:message "该井带 WinterFreeze 性状，关井超过 6h（crit:WinterOffLimit）有井口冻堵/管内凝油风险。" ;
+        sh:prefixes <https://example.org/well> ;
+        sh:select """
+            SELECT $this ?w ?off WHERE {
+                $this <https://example.org/well#decidesFor> ?w .
+                ?w <https://example.org/well#hasTrait> <https://example.org/well/trait/WinterFreeze> .
+                $this <https://example.org/well#hasCycleOffHours> ?off .
+                FILTER (?off > 6.0)
+            }
+        """ ;
+    ] .
+
+well:CO2OffLimitShape a sh:NodeShape ;
+    sh:targetClass well:StartDecision ;
+    rdfs:label "CCUS 驱油井单次关井不得超过 4h"@zh ;
+    sh:sparql [
+        a sh:SPARQLConstraint ;
+        sh:message "该井带 CO2Breakthrough 性状，关井超过 4h（crit:CO2FloodOffLimit）会加剧气窜与气锁。" ;
+        sh:prefixes <https://example.org/well> ;
+        sh:select """
+            SELECT $this ?w ?off WHERE {
+                $this <https://example.org/well#decidesFor> ?w .
+                ?w <https://example.org/well#hasTrait> <https://example.org/well/trait/CO2Breakthrough> .
+                $this <https://example.org/well#hasCycleOffHours> ?off .
+                FILTER (?off > 4.0)
+            }
+        """ ;
+    ] .
+
+well:MeasurementShape a sh:NodeShape ;
+    sh:targetClass well:Measurement ;
+    rdfs:label "观测证据必须完整"@zh ;
+    sh:property [
+        sh:path well:ofMetric ; sh:minCount 1 ; sh:class well:Metric ;
+        sh:message "观测值未说明测的是什么指标。" ;
+    ] ;
+    sh:property [
+        sh:path well:hasValue ; sh:minCount 1 ; sh:datatype xsd:decimal ;
+        sh:message "观测值缺少数值。" ;
+    ] ;
+    sh:property [
+        sh:path well:atTime ; sh:minCount 1 ; sh:datatype xsd:dateTime ;
+        sh:message "观测值缺少时间戳（无法判断证据是否过期）。" ;
+    ] .

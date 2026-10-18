@@ -1,0 +1,66 @@
+@prefix sh:   <http://www.w3.org/ns/shacl#> .
+@prefix um:   <https://example.org/um#> .
+@prefix an:   <https://example.org/um/anomaly/> .
+@prefix lvl:  <https://example.org/um/lvl/> .
+@prefix xsd:  <http://www.w3.org/2001/XMLSchema#> .
+@prefix rdfs: <http://www.w3.org/2000/01/rdf-schema#> .
+
+##############################################################################
+# L4 准入门禁：申报 L4 必须同时满足"能力 / 自愈覆盖 / 实测证据 / 授权"
+# 缺任何一维，就不是 L4 —— 只是"正常时没人、出事喊人"的 L3。
+##############################################################################
+
+um:L4EvidenceShape a sh:NodeShape ;
+    sh:targetClass um:Station ;
+    rdfs:label "申报 L4 必须拿出实测证据"@zh ;
+    sh:sparql [
+        a sh:SPARQLConstraint ;
+        sh:message "申报 L4 但实测证据不足：需连续无干预≥30天、自愈闭环率≥0.8、误动作率≤0.01、演练 8/8 全过。" ;
+        sh:prefixes <https://example.org/um> ;
+        sh:select """
+            SELECT $this ?days ?rate ?fa ?passed ?total WHERE {
+                $this <https://example.org/um#atLevel> <https://example.org/um/lvl/L4> .
+                $this <https://example.org/um#autonomyDays> ?days .
+                $this <https://example.org/um#selfHealRate> ?rate .
+                $this <https://example.org/um#falseActionRate> ?fa .
+                $this <https://example.org/um#drillsPassed> ?passed .
+                $this <https://example.org/um#drillsTotal> ?total .
+                FILTER (?days < 30 || ?rate < 0.8 || ?fa > 0.01 || ?passed < ?total)
+            }
+        """ ;
+    ] .
+
+um:L4AuthorizationShape a sh:NodeShape ;
+    sh:targetClass um:Station ;
+    rdfs:label "申报 L4 必须有授权与兜底"@zh ;
+    sh:sparql [
+        a sh:SPARQLConstraint ;
+        sh:message "申报 L4 但授权/兜底未到位：需规程修订、接入集中监控中心、应急到场≤30min。" ;
+        sh:prefixes <https://example.org/um> ;
+        sh:select """
+            SELECT $this ?rev ?center ?mins WHERE {
+                $this <https://example.org/um#atLevel> <https://example.org/um/lvl/L4> .
+                $this <https://example.org/um#procedureRevised> ?rev .
+                $this <https://example.org/um#centerConnected> ?center .
+                $this <https://example.org/um#emergencyMinutes> ?mins .
+                FILTER (?rev = false || ?center = false || ?mins > 30)
+            }
+        """ ;
+    ] .
+
+um:L4CoverageShape a sh:NodeShape ;
+    sh:targetClass um:Station ;
+    rdfs:label "申报 L4 必须覆盖全部关键异常"@zh ;
+    sh:sparql [
+        a sh:SPARQLConstraint ;
+        sh:message "申报 L4 但存在未覆盖的关键异常（缺自愈预案），异常一来仍需派人。" ;
+        sh:prefixes <https://example.org/um> ;
+        sh:select """
+            SELECT $this ?missing WHERE {
+                $this <https://example.org/um#atLevel> <https://example.org/um/lvl/L4> .
+                ?missing a <https://example.org/um#Anomaly> ;
+                         <https://example.org/um#criticalAnomaly> true .
+                FILTER NOT EXISTS { $this <https://example.org/um#coversAnomaly> ?missing }
+            }
+        """ ;
+    ] .

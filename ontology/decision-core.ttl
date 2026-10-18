@@ -1,0 +1,166 @@
+@prefix ao:   <https://example.org/ao#> .
+@prefix m:    <https://example.org/ao/metric/> .
+@prefix act:  <https://example.org/ao/act/> .
+@prefix rule: <https://example.org/ao/rule/> .
+@prefix con:  <https://example.org/ao/constraint/> .
+@prefix owl:  <http://www.w3.org/2002/07/owl#> .
+@prefix rdf:  <http://www.w3.org/1999/02/22-rdf-syntax-ns#> .
+@prefix rdfs: <http://www.w3.org/2000/01/rdf-schema#> .
+@prefix xsd:  <http://www.w3.org/2001/XMLSchema#> .
+@prefix skos: <http://www.w3.org/2004/02/skos/core#> .
+
+##############################################################################
+# 开/关井决策本体（建立在分析语义层之上）
+#
+# 关键立场：**决策规则也是数据，不是代码。**
+#   · 阈值、动作、约束全部机器可读 → 换阈值不改代码、可评审、可回溯；
+#   · 每条决策必须挂"命中了哪条规则 + 哪个指标的实测值"，否则不许下发；
+#   · 规则只允许"保守方向"的动作由系统自动执行（缩短时率/关井），
+#     "激进方向"（提高时率/复产）一律升级人工。
+#
+# 判据来源（全部是分析语义层里的口径，不另起一套）：
+#   泵效 <30% → 抽汲能力过剩 → 缩短时率（省电，产量不变）
+#   泵效 ≥70% → 供液充足 → 维持或提高时率（此时间开会减产）
+#   时率 × 理论排量 与 实际产液 的差额，就是"空抽"的部分。
+##############################################################################
+
+<https://example.org/ao/decision> a owl:Ontology ;
+    rdfs:label "Well On/Off Decision Ontology"@en , "油井开关井决策本体"@zh ;
+    owl:imports <https://example.org/ao> ;
+    owl:versionIRI <https://example.org/ao/decision/1.0.0> .
+
+###########################  1. 动作  ########################################
+
+ao:DecisionAction a owl:Class ; rdfs:label "DecisionAction"@en , "决策动作"@zh .
+ao:autonomousAllowed a owl:DatatypeProperty ; rdfs:range xsd:boolean ;
+    rdfs:label "是否允许系统自动执行（单向安全）"@zh .
+
+act:ShutIn a ao:DecisionAction ; rdfs:label "缩短时率/关井"@zh ; ao:autonomousAllowed true ;
+    skos:note "只减不增，安全的自动动作。"@zh .
+act:Hold a ao:DecisionAction ; rdfs:label "维持当前制度"@zh ; ao:autonomousAllowed true .
+act:Start a ao:DecisionAction ; rdfs:label "开井/提高时率"@zh ; ao:autonomousAllowed false ;
+    skos:note "增加抽汲强度，可能加剧供液不足与磨损；须人工确认后执行。"@zh .
+act:Escalate a ao:DecisionAction ; rdfs:label "升级人工"@zh ; ao:autonomousAllowed true .
+act:Stop a ao:DecisionAction ; rdfs:label "建议关停（经营决策）"@zh ; ao:autonomousAllowed false ;
+    skos:note "涉及产量与SEC储量，属经营决策，系统只给建议。"@zh .
+
+###########################  2. 约束  ########################################
+
+ao:Constraint a owl:Class ; rdfs:label "Constraint"@en , "执行约束"@zh .
+ao:constraintValue a owl:DatatypeProperty ; rdfs:domain ao:Constraint ; rdfs:range xsd:decimal .
+ao:constraintUnit a owl:DatatypeProperty ; rdfs:domain ao:Constraint ; rdfs:range xsd:string .
+
+con:MinOffTime a ao:Constraint ; rdfs:label "最小单次关井时长"@zh ;
+    ao:constraintValue 4 ; ao:constraintUnit "h" ;
+    skos:note "低于该值说明启停过频，会缩短电机/减速箱/杆管柱寿命。"@zh .
+con:MaxOffHeavy a ao:Constraint ; rdfs:label "稠油井单次关井上限"@zh ;
+    ao:constraintValue 8 ; ao:constraintUnit "h" ;
+    skos:note "关井过久有凝管、蜡卡风险。"@zh .
+con:MaxOffWinter a ao:Constraint ; rdfs:label "寒区冬季单次关井上限"@zh ;
+    ao:constraintValue 6 ; ao:constraintUnit "h" ;
+    skos:note "11 月—次年 3 月生效，防井口冻堵。"@zh .
+con:MaxStartsPerDay a ao:Constraint ; rdfs:label "单井每日启停上限"@zh ;
+    ao:constraintValue 3 ; ao:constraintUnit "次/日" .
+con:EconomicFloor a ao:Constraint ; rdfs:label "单井日产油经济极限"@zh ;
+    ao:constraintValue 0.1 ; ao:constraintUnit "t/d" ;
+    skos:note "低于该值，间开与降冲次都救不回来，应进入关停/措施评估。"@zh .
+
+###########################  3. 规则  ########################################
+
+ao:DecisionRule a owl:Class ; rdfs:label "DecisionRule"@en , "决策规则"@zh .
+ao:ruleId a owl:DatatypeProperty ; rdfs:domain ao:DecisionRule ; rdfs:range xsd:string .
+ao:priority a owl:DatatypeProperty ; rdfs:domain ao:DecisionRule ; rdfs:range xsd:integer ;
+    rdfs:label "优先级（小者先判）"@zh .
+ao:onMetric a owl:ObjectProperty ; rdfs:domain ao:DecisionRule ; rdfs:range ao:Metric .
+ao:operator a owl:DatatypeProperty ; rdfs:domain ao:DecisionRule ; rdfs:range xsd:string ;
+    skos:note "lt / le / gt / ge"@zh .
+ao:threshold a owl:DatatypeProperty ; rdfs:domain ao:DecisionRule ; rdfs:range xsd:decimal .
+ao:takesAction a owl:ObjectProperty ; rdfs:domain ao:DecisionRule ; rdfs:range ao:DecisionAction .
+ao:rationale a owl:DatatypeProperty ; rdfs:domain ao:DecisionRule ; rdfs:range xsd:string .
+ao:enabled a owl:DatatypeProperty ; rdfs:domain ao:DecisionRule ; rdfs:range xsd:boolean .
+
+rule:R1-dead a ao:DecisionRule ;
+    rdfs:label "长期不产液 → 升级人工（复产评估）"@zh ;
+    ao:ruleId "R1" ; ao:priority 10 ; ao:enabled true ;
+    ao:onMetric m:liquid_m3 ; ao:operator "le" ; ao:threshold 0.1 ;
+    ao:takesAction act:Escalate ;
+    ao:rationale "7 天累计产液近零，说明无供液或泵失效，系统不得自动开井。"@zh .
+
+rule:R2-econ a ao:DecisionRule ;
+    rdfs:label "低于经济极限 → 经营决策（关停/措施）"@zh ;
+    ao:ruleId "R2" ; ao:priority 20 ; ao:enabled true ;
+    ao:onMetric m:oil_rate ; ao:operator "lt" ; ao:threshold 0.1 ;
+    ao:takesAction act:Stop ;
+    ao:rationale "日产油低于 0.1 t，间开与降冲次都无法改善，应交经营层决策。"@zh .
+
+rule:R3-sufficient a ao:DecisionRule ;
+    rdfs:label "供液充足 → 维持/提高时率"@zh ;
+    ao:ruleId "R3" ; ao:priority 30 ; ao:enabled true ;
+    ao:onMetric m:pump_eff ; ao:operator "ge" ; ao:threshold 0.90 ;
+    ao:takesAction act:Start ;
+    ao:rationale "泵效≥0.90：泵每次基本充满（泵受限），此时缩短时率会直接减产，应提高时率或维持连续。"@zh .
+
+rule:R4-insufficient a ao:DecisionRule ;
+    rdfs:label "抽汲能力过剩 → 缩短时率（间开）"@zh ;
+    ao:ruleId "R4" ; ao:priority 40 ; ao:enabled true ;
+    ao:onMetric m:pump_eff ; ao:operator "lt" ; ao:threshold 0.30 ;
+    ao:takesAction act:ShutIn ;
+    ao:rationale "泵效<0.30：抽汲能力远大于供液，大部分运行时间在空抽。目标时率=1.2×供液比，产量不变、电耗下降。"@zh .
+
+rule:R5-mid a ao:DecisionRule ;
+    rdfs:label "中间区间 → 优先降冲次，维持制度"@zh ;
+    ao:ruleId "R5" ; ao:priority 50 ; ao:enabled true ;
+    ao:onMetric m:pump_eff ; ao:operator "lt" ; ao:threshold 0.90 ;
+    ao:takesAction act:Hold ;
+    ao:rationale "泵效 30%~90%：中间区间，调参（降冲次/换小泵）优于频繁启停，先维持现制度。"@zh .
+
+###########################  4. 决策实例  ####################################
+
+ao:WellDecision a owl:Class ; rdfs:label "WellDecision"@en , "开关井决策"@zh .
+ao:decidesWell a owl:ObjectProperty ; rdfs:domain ao:WellDecision ; rdfs:range ao:OilWell .
+ao:hasAction a owl:ObjectProperty ; rdfs:domain ao:WellDecision ; rdfs:range ao:DecisionAction .
+ao:ruleFired a owl:ObjectProperty ; rdfs:domain ao:WellDecision ; rdfs:range ao:DecisionRule .
+ao:hasEvidence a owl:ObjectProperty ; rdfs:domain ao:WellDecision ; rdfs:range ao:MetricValue .
+ao:targetDuty a owl:DatatypeProperty ; rdfs:domain ao:WellDecision ; rdfs:range xsd:decimal .
+ao:onHours a owl:DatatypeProperty ; rdfs:domain ao:WellDecision ; rdfs:range xsd:decimal .
+ao:offHours a owl:DatatypeProperty ; rdfs:domain ao:WellDecision ; rdfs:range xsd:decimal .
+ao:expectedLiquidKeep a owl:DatatypeProperty ; rdfs:range xsd:decimal ;
+    rdfs:label "预期产液保持率(0~1)"@zh .
+ao:expectedKwhSaved a owl:DatatypeProperty ; rdfs:range xsd:decimal ;
+    rdfs:label "预期日节电(kWh)"@zh .
+ao:decidedAt a owl:DatatypeProperty ; rdfs:range xsd:dateTime .
+ao:confidence a owl:DatatypeProperty ; rdfs:range xsd:string .
+
+ao:MetricValue a owl:Class ; rdfs:label "MetricValue"@en , "指标实测值"@zh .
+ao:ofMetric a owl:ObjectProperty ; rdfs:domain ao:MetricValue ; rdfs:range ao:Metric .
+ao:value a owl:DatatypeProperty ; rdfs:domain ao:MetricValue ; rdfs:range xsd:decimal .
+ao:observedIn a owl:DatatypeProperty ; rdfs:domain ao:MetricValue ; rdfs:range xsd:string ;
+    rdfs:label "观测窗口"@zh .
+
+ao:OilWell a owl:Class ; rdfs:label "OilWell"@en , "油井"@zh .
+ao:hasTrait a owl:DatatypeProperty ; rdfs:domain ao:WellDecision ; rdfs:range xsd:string ;
+    rdfs:label "井性状（如 稠油）"@zh .
+ao:requiresApproval a owl:DatatypeProperty ; rdfs:domain ao:WellDecision ; rdfs:range xsd:boolean ;
+    rdfs:label "是否需要人工审批后才能执行"@zh .
+ao:windowDays a owl:DatatypeProperty ; rdfs:domain ao:WellDecision ; rdfs:range xsd:integer .
+
+###########################  5. 闭环回采与标定  ##############################
+
+ao:Calibration a owl:Class ; rdfs:label "Calibration"@en , "按井标定参数"@zh .
+ao:ofWell a owl:ObjectProperty ; rdfs:domain ao:Calibration ; rdfs:range ao:OilWell .
+ao:loadFactor a owl:DatatypeProperty ; rdfs:domain ao:Calibration ; rdfs:range xsd:decimal ;
+    rdfs:label "实测电机负载系数"@zh ;
+    skos:note "预测节电用的 22kW×0.8 是全局假设；按井标定后偏差可收敛到 10% 以内。"@zh .
+ao:liquidKeepObserved a owl:DatatypeProperty ; rdfs:domain ao:Calibration ; rdfs:range xsd:decimal ;
+    rdfs:label "实测产液保持率"@zh .
+ao:calibratedAt a owl:DatatypeProperty ; rdfs:domain ao:Calibration ; rdfs:range xsd:dateTime .
+
+ao:downgraded a owl:DatatypeProperty ; rdfs:domain ao:WellDecision ; rdfs:range xsd:boolean ;
+    rdfs:label "是否因偏差超阈值降级为人工确认"@zh .
+
+rule:C1-calibration a ao:DecisionRule ;
+    rdfs:label "回采偏差超阈值 → 降级人工"@zh ;
+    ao:ruleId "C1" ; ao:priority 5 ; ao:enabled false ;
+    ao:onMetric m:pump_eff ; ao:operator "lt" ; ao:threshold 999 ;
+    ao:takesAction act:Escalate ;
+    ao:rationale "预期与实际偏差超过阈值，说明该井参数或工况与模型不符，自动执行风险高；先人工复核并标定参数。"@zh .
