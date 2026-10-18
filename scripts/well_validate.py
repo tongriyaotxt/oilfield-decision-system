@@ -73,7 +73,7 @@ def main() -> int:
     bad_src.add((b, W.hasDutyRatio, Literal(0.03)))
     # 故意不给 basedOn / createdAt / confidence，用来触发可追溯性约束
 
-    # ── 吉林特有场景：寒区冬季 + CO2 气窜敏感井，关 10h ──
+    # ── 寒区特有场景：冬季冻结风险 + CO2 气窜敏感井，关 10h ──
     jl = WR["W99-Jilin"]
     bad_src.add((jl, RDF.type, W.OilWell))
     bad_src.add((jl, W.hasTrait, TR["WinterFreeze"]))

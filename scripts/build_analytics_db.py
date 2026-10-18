@@ -25,10 +25,10 @@ DAYS = 90
 END = date(2026, 9, 30)
 
 BLOCKS = {
-    "扶余": ("第一采油厂", 8),
-    "新木": ("第一采油厂", 6),
-    "新立": ("第二采油厂", 6),
-    "红岗": ("第三采油厂", 4),
+    "甲区": ("第一采油厂", 8),
+    "乙区": ("第一采油厂", 6),
+    "丙区": ("第二采油厂", 6),
+    "丁区": ("第三采油厂", 4),
 }
 LIFTS = ("抽油机", "抽油机", "抽油机", "电泵", "螺杆泵")
 
@@ -63,8 +63,8 @@ def main() -> int:
             wells.append(dict(well=wid, block=block, plant=plant, lift=lift,
                               base=base, wc0=wc0, status=status, qth=qth,
                               depth=rnd.choice([900, 1100, 1250, 1400, 1600]),
-                              trait=("稠油" if (block == "红岗" and rnd.random() < 0.5) else "常规"),
-                              ccus=(block == "红岗" and rnd.random() < 0.6)))
+                              trait=("稠油" if (block == "丁区" and rnd.random() < 0.5) else "常规"),
+                              ccus=(block == "丁区" and rnd.random() < 0.6)))
             cur.execute("INSERT INTO well_meta VALUES (?,?,?,?,?,?,?,?)",
                         (wid, block, plant, lift, wells[-1]["trait"], qth,
                          wells[-1]["depth"], "2015-06-01"))

@@ -149,7 +149,7 @@ s:C02 a um:CentralPlant ; rdfs:label "C02 联合站（含 CO2 处理）"@zh ; um
     um:atLevel lvl:L2 ; um:targetLevel lvl:L4 ;
     um:hasCapability cap:C9 , cap:C1 , cap:C3 , cap:C6 .
 
-s:G01 a um:GasStation ; rdfs:label "G01 集气站（长岭火山岩气）"@zh ; um:servesWells 26 ; um:staffOnSite 3 ;
+s:G01 a um:GasStation ; rdfs:label "G01 集气站（火山岩气）"@zh ; um:servesWells 26 ; um:staffOnSite 3 ;
     um:atLevel lvl:L3 ; um:targetLevel lvl:L4 ;
     um:hasCapability cap:C9 , cap:C1 , cap:C3 , cap:C2 , cap:C4 , cap:C5 , cap:C6 , cap:C10 .
 

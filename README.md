@@ -62,7 +62,7 @@
 **⑩ AI 班报（真模型接入）**
 确定性代码算事实表 → 模型只写语言 → **机器核对数字**：报告里每个数字必须能在事实表找到，
 井号必须在风险清单内，`N 口井` 必须等于事实井数。
-真模型输出通过核对；编造版（1.8 t/d、新木-07、30 口井）被拒收并回退模板。
+真模型输出通过核对；编造版（1.8 t/d、乙区-07、30 口井）被拒收并回退模板。
 
 ---
 
@@ -232,7 +232,7 @@ build/                           所有运行产物（已 gitignore）
 | [ONTOLOGY-RESEARCH.md](ONTOLOGY-RESEARCH.md) | 想搞懂本体的人 | 本体论通识：语义阶梯、OWL profile 选型、OWL vs SHACL |
 | [OILFIELD-PLAN.md](OILFIELD-PLAN.md) | 工艺/开发 | 间开方法论：`duty = r/(r+f)` 推导、判据表、状态机 |
 | [DATAFLOW.md](DATAFLOW.md) | 架构 | 数据流/控制流、时延预算、容量核算（无人化语境） |
-| [JILIN-UNMANNED-PLAN.md](JILIN-UNMANNED-PLAN.md)、[L4-IMPLEMENTATION.md](L4-IMPLEMENTATION.md) | 归档 | 无人化 L0–L4 与 L4 准入（**已非主线**，仅作参考） |
+| [CASE-OLDFIELD-PLAN.md](CASE-OLDFIELD-PLAN.md)、[CASE-OLDFIELD-UNMANNED.md](CASE-OLDFIELD-UNMANNED.md) | 归档 | 通用化案例（成本视角 / 无人化 L0–L4），不含具体企业信息 |
 
 ---
 

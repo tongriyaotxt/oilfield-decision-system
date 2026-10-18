@@ -131,7 +131,7 @@ def check(text: str, f: dict) -> tuple[bool, list[str]]:
     for m in re.finditer(r"(\d+(?:\.\d+)?)\s*口井", text):
         if m.group(1) not in (str(f["wells"]), f"{f['wells']:.0f}"):
             problems.append(f"「{m.group(1)} 口井」与事实井数 {f['wells']} 不符")
-    for wid in re.findall(r"[扶余新木新立红岗]{2,3}-\d{2}", text):
+    for wid in re.findall(r"[甲区乙区丙区丁区]{2,3}-\d{2}", text):
         if wid not in f["wells_in_risk"]:
             problems.append(f"井号「{wid}」不在今日风险清单内")
     return (not problems), problems

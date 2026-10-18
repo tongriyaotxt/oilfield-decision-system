@@ -28,7 +28,7 @@
 命令 JSON 最小字段：
 
 ```json
-{"request_id":"扶余-01-20261001-ShutIn","well":"扶余-01","action":"ShutIn",
+{"request_id":"甲区-01-20261001-ShutIn","well":"甲区-01","action":"ShutIn",
  "on_h":3.0,"off_h":9.0,"duty":0.25,"deadline_s":30,
  "expected_state":"duty=0.25","auth":"A","issued_by":"agent"}
 ```
@@ -84,7 +84,7 @@ confirm(operator) ──► 解除幂等缓存 ──► 再次 dispatch（auth 
 `build/control-audit.jsonl` 每行一个事件：
 
 ```json
-{"type":"command.result","request_id":"新木-04-20261001-ShutIn","well":"新木-04",
+{"type":"command.result","request_id":"乙区-04-20261001-ShutIn","well":"乙区-04",
  "detail":"ShutIn → Done (134ms)","at":"2026-10-01T00:00:00+00:00"}
 ```
 

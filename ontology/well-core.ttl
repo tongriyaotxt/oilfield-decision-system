@@ -59,7 +59,7 @@ tr:GasLock   a well:Trait ; rdfs:label "易气锁"@zh .
 tr:FaultLock a well:Trait ; rdfs:label "故障锁定"@zh ;
     skos:note "存在过载/缺相等故障，禁止自动开井，只能人工处置。"@zh .
 
-# ── 寒区（吉林）特有性状 ────────────────────────────────────────────────
+# ── 寒区（东北）特有性状 ────────────────────────────────────────────────
 tr:WinterFreeze a well:Trait ; rdfs:label "冬季冻结风险"@zh ;
     skos:note "东北冬季井口/管线有冻堵、凝管风险，单次关井必须比常规更短；11月—次年3月强制生效。"@zh .
 
