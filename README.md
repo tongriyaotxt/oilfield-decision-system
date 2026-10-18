@@ -226,6 +226,7 @@ build/                           所有运行产物（已 gitignore）
 
 | 文档 | 谁读 | 内容 |
 |---|---|---|
+| [PROGRESS.md](PROGRESS.md) | **接手先读** | 项目进度、待办、踩过的坑、决策记录 |
 | [ANALYTICS-AGENT-PLAN.md](ANALYTICS-AGENT-PLAN.md) | 产品/数据 | 分析本体与 Agent 主方案（含 §12 决策层、§13 闭环） |
 | [CONTROL-INTERFACE.md](CONTROL-INTERFACE.md) | 开发/集成 | 七个接口、命令状态机、A/B/C 授权、灰度回滚、上线 checklist |
 | [SIM-ENVIRONMENT.md](SIM-ENVIRONMENT.md) | 测试/评审 | 沙箱架构、注入的故障清单、被它抓出的三个真 bug |
